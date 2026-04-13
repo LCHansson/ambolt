@@ -162,7 +162,10 @@ page_content <- function(..., gap = NULL, class = NULL, style = NULL) {
 #'
 #' @param title Character. Main heading text.
 #' @param subtitle Character. Optional subtitle below the heading.
-#' @param actions List. Action nodes to render right-aligned (e.g., logout_button()).
+#' @param actions List. Action nodes to render right-aligned (e.g., create_button()).
+#' @param help Character. Raw HTML for a help button rendered inline with the
+#'   title. On mobile, stays next to the heading while actions wrap to a
+#'   second row.
 #' @param class Character. Additional CSS class(es).
 #' @param style Named list. Inline CSS properties.
 #' @return A layout node (named list with `type = "page_header"`).
@@ -174,9 +177,9 @@ page_content <- function(..., gap = NULL, class = NULL, style = NULL) {
 #'   actions = list(create_button("New contact", modal = "contacts/create"))
 #' )
 page_header <- function(title, subtitle = NULL, actions = list(),
-                        class = NULL, style = NULL) {
+                        help = NULL, class = NULL, style = NULL) {
   .drop_nulls(list(type = "page_header", title = title, subtitle = subtitle,
-                   actions = actions, class = class, style = style))
+                   actions = actions, help = help, class = class, style = style))
 }
 
 #' Stat cards grid.

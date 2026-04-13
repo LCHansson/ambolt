@@ -365,6 +365,21 @@
     cursor: pointer;
     font-size: 0.85rem;
   }
+  @media (max-width: 480px) {
+    .ambolt-data-table {
+      padding: 0.5rem;
+    }
+    th, td {
+      padding: 0.3rem 0.4rem;
+      font-size: 0.8rem;
+    }
+    .table-search {
+      width: 100%;
+    }
+    .table-toolbar {
+      flex-wrap: wrap;
+    }
+  }
   .pagination button:hover:not(:disabled) {
     background: #f3f4f6;
   }

@@ -468,14 +468,24 @@
       padding-left: 2.5rem;
     }
   }
+  .ambolt-page-help {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.3rem;
+    vertical-align: baseline;
+  }
   @media (max-width: 480px) {
     .ambolt-page-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.5rem;
+      flex-wrap: wrap;
+      gap: 0.3rem;
       padding-left: 2.5rem;
     }
+    .ambolt-page-header-title {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
     .ambolt-page-title { font-size: 1.2rem; }
+    .ambolt-page-subtitle { font-size: 0.8rem; }
     .ambolt-page-actions {
       flex-wrap: wrap;
       gap: 0.3rem;

@@ -88,4 +88,18 @@
     gap: 0.5rem;
     align-items: center;
   }
+  @media (max-width: 480px) {
+    .ambolt-view-bar {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .ambolt-view-btn {
+      font-size: 0.8rem;
+      padding: 0.3rem 0.5rem;
+    }
+    .ambolt-view-actions {
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+  }
 </style>

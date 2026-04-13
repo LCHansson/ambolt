@@ -284,6 +284,11 @@
               </div>
             {/if}
           {/if}
+          {#if !entry.loading}
+            <div class="modal-close-inline">
+              <button onclick={() => modal.closeAll()}>Stäng</button>
+            </div>
+          {/if}
         </div>
       </div>
   </div>
@@ -367,7 +372,24 @@
   .ambolt-modal-body {
     padding: 1.25rem;
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
     flex: 1;
+    min-height: 0;
+  }
+  /* Prevent wide children from causing horizontal scroll */
+  .ambolt-modal-body :global(table) {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .ambolt-modal-body :global(img) {
+    max-width: 100%;
+    height: auto;
+  }
+  .ambolt-modal-body :global(pre) {
+    overflow-x: auto;
+    max-width: 100%;
   }
   .loading {
     color: #6b7280;
@@ -442,11 +464,21 @@
   .form-submit.danger {
     background: var(--ambolt-danger, #dc2626);
   }
+  /* Stäng button — uses :global() because Svelte scoped CSS fails to
+     match elements inside deeply nested {#if} + RenderNode chains */
+  :global(.modal-close-inline) {
+    display: none;
+  }
   @media (max-width: 640px) {
+    .ambolt-modal-backdrop {
+      padding-top: 0;
+    }
     .ambolt-modal {
-      width: calc(100vw - 1rem);
-      max-height: 92vh;
-      top: 2vh;
+      width: 100vw;
+      max-width: 100vw;
+      max-height: 100vh;
+      top: 0;
+      border-radius: 0;
     }
     .ambolt-modal-header {
       padding: 0.75rem 1rem;
@@ -454,6 +486,22 @@
     }
     .ambolt-modal-body {
       padding: 0.75rem 1rem;
+    }
+    :global(.modal-close-inline) {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #e5e7eb;
+    }
+    :global(.modal-close-inline button) {
+      padding: 0.4rem 1.2rem;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: white;
+      color: #374151;
+      font-size: 0.9rem;
+      cursor: pointer;
     }
     .modal-tab-bar {
       gap: 0;

@@ -186,7 +186,10 @@
 #' Render a page_header node with title, subtitle, and action buttons.
 #' @noRd
 .render_tree_page_header <- function(node) {
-  title_html <- sprintf('<h2 class="ambolt-page-title">%s</h2>', node$title)
+  help_html <- if (!is.null(node$help)) {
+    sprintf(' <span class="ambolt-page-help">%s</span>', node$help)
+  } else ""
+  title_html <- sprintf('<h2 class="ambolt-page-title">%s%s</h2>', node$title, help_html)
   subtitle_html <- if (!is.null(node$subtitle)) {
     sprintf('\n        <p class="ambolt-page-subtitle">%s</p>', node$subtitle)
   } else ""
@@ -213,7 +216,7 @@
 
   hdr_classes <- .render_class_attr("ambolt-page-header", node$class)
   style_attr <- .render_style_attr(node$style)
-  sprintf('    <div class="%s"%s>\n      <div>%s%s\n      </div>%s\n    </div>',
+  sprintf('    <div class="%s"%s>\n      <div class="ambolt-page-header-title">%s%s\n      </div>%s\n    </div>',
     hdr_classes, style_attr, title_html, subtitle_html, actions_html)
 }
 

@@ -82,8 +82,11 @@
 
   {:else if node.type === 'page_header'}
     <div class="ambolt-page-header {node.class ?? ''}" style={styleToString(node.style)}>
-      <div>
-        <h2 class="ambolt-page-title">{node.title}</h2>
+      <div class="ambolt-page-header-title">
+        <h2 class="ambolt-page-title">
+          {node.title}
+          {#if node.help}<span class="ambolt-page-help">{@html node.help}</span>{/if}
+        </h2>
         {#if node.subtitle}
           <p class="ambolt-page-subtitle">{node.subtitle}</p>
         {/if}
