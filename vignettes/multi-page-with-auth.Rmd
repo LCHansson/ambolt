@@ -1,0 +1,275 @@
+---
+title: "Building a multi-page app with authentication"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Building a multi-page app with authentication}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+## When one page isn't enough
+
+The getting-started vignette covers single-page apps with a sidebar and
+main area. But real applications grow: you need separate screens, a
+navigation menu, login pages, pop-up forms, and backend structure that
+scales.
+
+ambolt's multi-page mode gives you all of this. This vignette walks
+through the patterns used in a production six-page CRM built with ambolt.
+
+## Pages and navigation
+
+Instead of `app$input()` / `app$output()` / `app$ui()`, multi-page apps
+use `app$page()` and `app$module()`:
+
+```{r}
+library(ambolt)
+
+app <- create_app()
+app$meta(title = "My App", lang = "en")
+
+app$page("overview", title = "Overview", icon = "house",
+  ui = page_content(
+    page_header("Overview", subtitle = "At a glance"),
+    stat_cards("overview/stats")
+  )
+)
+
+app$page("contacts", title = "Contacts", icon = "people",
+  ui = page_content(
+    page_header("Contacts", actions = list(
+      create_button("New contact", modal = "contacts/create", icon = "plus")
+    )),
+    "contacts/table"
+  )
+)
+
+app$run()
+```
+
+Each page gets an entry in the sidebar navigation — with an icon, a label,
+and URL hash routing (`#/overview`, `#/contacts`). The `ui` argument takes a
+layout tree built from the same composable functions as single-page apps:
+`page_content()`, `page_header()`, `section()`, `columns()`, and so on.
+
+Notice that some children are strings like `"overview/stats"` and
+`"contacts/table"`. These reference **module outputs** — components that
+fetch their own data from the backend. We'll define those next.
+
+## Modules: organize your backend
+
+A module groups related endpoints, outputs, and modals under a namespace:
+
+```{r}
+app$module("overview", function(mod, app) {
+  # Endpoint: GET /api/overview/stats
+  mod$get("/stats", function(req, res) {
+    n <- DBI::dbGetQuery(app$context$db, "SELECT COUNT(*) AS n FROM contacts")$n
+    res$json(list(total = n, active = n))
+  })
+
+  # Declare the output so the page can reference it as "overview/stats"
+  mod$output("stats", type = "stats",
+    endpoint = "/api/overview/stats",
+    cards = list(
+      list(key = "total", label = "Total", color = "primary"),
+      list(key = "active", label = "Active", color = "success")
+    )
+  )
+})
+```
+
+The module function receives a `mod` object with the same HTTP verb methods
+as the app (`mod$get()`, `mod$post()`, etc.), but paths are automatically
+prefixed with `/api/{module_id}`. This keeps your backend organized as the
+app grows — each page gets its own module with its own endpoints.
+
+## Authentication
+
+ambolt has a built-in authentication system. You provide two functions —
+one to verify a session token, one to handle login — and the framework
+takes care of the login page, cookies, and route protection:
+
+```{r}
+app$auth(
+  verify = function(token, db) {
+    # Look up the session token in your database
+    # Return user data (list) or NULL if invalid
+    user <- get_session_user(db, token)
+    if (is.null(user)) return(NULL)
+    list(id = user$id, name = user$name, is_admin = user$is_admin)
+  },
+
+  login = function(username, password, db) {
+    # Verify credentials against your database
+    user <- verify_user(db, username, password)
+    if (is.null(user)) return(NULL)
+    # Create a session and return token + user data
+    token <- ambolt_session_token()
+    create_session(db, user$id, token)
+    list(token = token, user = list(id = user$id, name = user$name))
+  }
+)
+```
+
+When auth is configured:
+
+- Every `/api/` route is protected — unauthenticated requests get a 401
+- The framework serves a login page at the app root
+- Session cookies are HttpOnly and SameSite=Strict
+- A rate limiter blocks brute-force login attempts
+- The `req$user` object is available in every route handler
+
+The auth system is pluggable: you bring your own database and verify
+function. ambolt provides helpers for the common operations:
+
+- `ambolt_session_token()` — generates a cryptographically random token
+- `ambolt_hash_password(password)` — hashes a password (SHA-256)
+- `ambolt_verify_password(password, hash)` — verifies a password against
+  a stored hash
+
+## Modals
+
+Modals are pop-up dialogs for forms, detail views, and confirmations.
+They can use the same layout functions as pages:
+
+```{r}
+app$module("contacts", function(mod, app) {
+  # Form modal
+  mod$modal("create", size = "lg", render = function(params) {
+    list(
+      title = "New contact",
+      fields = list(
+        list(id = "name", type = "text", label = "Name", required = TRUE),
+        list(id = "email", type = "text", label = "Email")
+      ),
+      submit = list(
+        endpoint = "/api/contacts",
+        method = "POST",
+        emit = "contacts:updated",
+        label = "Create"
+      )
+    )
+  })
+
+  # Detail modal with composable layout
+  mod$modal("profile", size = "lg", render = function(params) {
+    contact <- get_contact(app$context$db, params$id)
+    list(
+      title = contact$name,
+      content = page_content(
+        page_header(contact$name, subtitle = contact$role),
+        section("Details",
+          html_block(sprintf("<p><strong>Email:</strong> %s</p>", contact$email))
+        )
+      )
+    )
+  })
+})
+```
+
+There are three modal shapes:
+
+- **Form modals** — return `list(title, fields, submit)`. The framework
+  renders the form inputs and handles submission automatically.
+- **Content modals** — return `list(title, content)` where `content` is
+  a layout tree. The framework renders it using the same components as
+  pages.
+- **HTML modals** — return `list(title, html)` for one-off custom content.
+
+Content modals are the most powerful: they render at request time, so the
+layout can depend on database queries, parameters, and user context. The
+`html_block()` function serves as an escape hatch for anything the built-in
+layout functions don't cover.
+
+## Theming
+
+Set your brand colors once, and every component picks them up:
+
+```{r}
+app$theme(
+  colors = list(
+    primary = "#006589",
+    secondary = "#710049",
+    success = "#339933",
+    warning = "#E37222"
+  )
+)
+```
+
+The theming system works in three tiers:
+
+1. **Theme tokens** (global) — `app$theme()` sets CSS variables that
+   propagate to all components.
+2. **Semantic props** (per-component) — arguments like `compact`, `gap`,
+   `variant` that control layout behavior.
+3. **Escape hatch** (per-instance) — `class` and `style` arguments on any
+   layout function for one-off overrides.
+
+For full control, use `app$theme(css = "...")` to inject arbitrary CSS.
+
+## Putting it together
+
+Here's the skeleton of a complete multi-page app with auth and theming:
+
+```{r}
+library(ambolt)
+
+app <- create_app()
+app$meta(title = "My CRM", lang = "en")
+app$theme(colors = list(primary = "#006589"))
+
+# Database connection (stored in app$context for access in handlers)
+app$context$db <- DBI::dbConnect(RSQLite::SQLite(), "my_app.sqlite")
+app$on_stop(function() DBI::dbDisconnect(app$context$db))
+
+# Authentication
+app$auth(
+  verify = function(token, db) { ... },
+  login = function(username, password, db) { ... }
+)
+
+# Pages
+app$page("overview", title = "Overview", icon = "house",
+  ui = page_content(
+    page_header("Overview"),
+    stat_cards("overview/stats")
+  )
+)
+
+app$page("contacts", title = "Contacts", icon = "people",
+  ui = page_content(
+    page_header("Contacts"),
+    "contacts/table"
+  )
+)
+
+# Modules (endpoints, outputs, modals)
+app$module("overview", function(mod, app) { ... })
+app$module("contacts", function(mod, app) { ... })
+
+app$run()
+```
+
+This is the same pattern used in production apps built with ambolt —
+multi-page CRMs with form modals, database migration frameworks, and
+export pipelines.
+
+## Under the hood
+
+*You don't need to know any of this to use ambolt.* But if you're curious,
+or want to extend the framework:
+
+ambolt generates a [Svelte 5](https://svelte.dev/) frontend from your R
+declarations. For pages, the R codegen walks your layout tree at build time
+and emits static Svelte markup, which is compiled by Vite into optimized
+JavaScript. For modals, the layout tree is serialized as JSON and walked
+at request time by a recursive Svelte component called `RenderNode`.
+
+The 30+ Svelte components live in `inst/svelte/components/`. You can add
+new component types by defining an R constructor (with `.drop_nulls()`),
+exporting it, and adding a dispatch branch in `RenderNode.svelte`.

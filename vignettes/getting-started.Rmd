@@ -1,0 +1,188 @@
+---
+title: "Getting started with ambolt"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with ambolt}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+## What is ambolt?
+
+ambolt is for R developers who want to build web apps without learning a
+frontend framework. You write R functions that describe your layout, your
+inputs, and your outputs. The framework handles the frontend — generating a
+modern single-page application with interactive components, responsive
+layout, and URL routing.
+
+If you've used Shiny, the workflow will feel familiar: you define **what**
+exists (inputs, outputs) and **where** it goes (layout), then start the app.
+The key difference is that ambolt compiles a real frontend at startup rather
+than rendering HTML on every interaction — which makes apps faster and
+easier to extend.
+
+## Prerequisites
+
+- **R** (>= 4.1) with the ambolt package installed
+- **Node.js** (>= 18) — ambolt uses npm behind the scenes to build the
+  frontend on first startup
+
+Install ambolt from GitHub:
+
+```{r}
+# install.packages("remotes")
+remotes::install_github("LCHansson/ambolt")
+```
+
+## Your first app: Hello World
+
+Create a file called `app.R`:
+
+```{r}
+library(ambolt)
+
+app <- create_app()
+
+# A text input in the sidebar
+app$input("name", "text", label = "Your name", placeholder = "Type here...")
+
+# An HTML output in the main area
+app$output("greeting", "html",
+  depends_on = "name",
+  render = function(params) {
+    sprintf("<h2>Hello, %s!</h2>", params$name)
+  }
+)
+
+# Place the input in the sidebar, the output in the main area
+app$ui(sidebar_layout(
+  sidebar("name"),
+  main("greeting")
+))
+
+app$run()
+```
+
+Run it:
+
+```bash
+Rscript app.R
+```
+
+Visit <http://localhost:3000>. You'll see a sidebar with your text input on
+the left and the greeting on the right — updating as you type. The first
+startup takes a few seconds (npm installs dependencies and compiles the
+frontend); subsequent starts use a cache and are near-instant.
+
+Let's walk through what happened:
+
+1. `create_app()` creates an app object — a container for everything.
+2. `app$input()` declares a text input with an id, type, and label.
+3. `app$output()` declares an output that depends on the input and renders
+   HTML from the current input values.
+4. `app$ui()` with `sidebar_layout(sidebar(...), main(...))` tells the
+   framework where to place things — inputs on the left, outputs on the right.
+5. `app$run()` starts the server and opens the browser.
+
+## Adding a plot
+
+Extend the app with a scatter plot that responds to user inputs:
+
+```{r}
+library(ambolt)
+
+app <- create_app()
+
+app$input("n", "slider", label = "Number of points",
+  value = 50, min = 10, max = 500, step = 10)
+
+app$input("color", "select", label = "Color",
+  choices = c("steelblue", "coral", "forestgreen"))
+
+app$output("scatter", "plot",
+  depends_on = c("n", "color"),
+  render = function(params) {
+    n <- as.numeric(params$n)
+    ggplot2::ggplot(
+      data.frame(x = rnorm(n), y = rnorm(n)),
+      ggplot2::aes(x, y)
+    ) + ggplot2::geom_point(color = params$color, alpha = 0.6)
+  }
+)
+
+app$ui(sidebar_layout(
+  sidebar("n", "color"),
+  main("scatter")
+))
+
+app$run()
+```
+
+The plot output renders as inline SVG — no image files, no file I/O. The
+framework calls your render function whenever the depended-upon inputs
+change.
+
+## Layout building blocks
+
+The layout functions are composable R functions that nest however you want.
+Here are the most common ones:
+
+**`section()`** groups related items with an optional label:
+
+```{r}
+sidebar(
+  section("Vehicle", "make", "model", "year"),
+  section("Economics", "fuel_price", "discount_rate")
+)
+```
+
+**`columns()`** puts children side by side (collapses to stacked on mobile):
+
+```{r}
+main(
+  columns("chart_a", "chart_b", gap = "2rem")
+)
+```
+
+**`details()`** creates a collapsible section:
+
+```{r}
+main(
+  "result",
+  details("Show assumptions",
+    "assumption_1", "assumption_2", "assumption_3"
+  )
+)
+```
+
+These are plain R functions that return lists. You can nest them, store them
+in variables, pass them to other functions — whatever makes your layout code
+readable.
+
+## Dev mode
+
+During development, set the `AMBOLT_DEV` environment variable to get a live-
+reloading development server:
+
+```bash
+AMBOLT_DEV=TRUE Rscript app.R
+```
+
+| | Dev mode | Production mode |
+|---|---|---|
+| **Frontend** | Vite dev server with hot reload | Pre-built static files |
+| **Speed** | Rebuilds on file changes | Cached, near-instant startup |
+| **Use for** | Development | Deployment |
+
+## Next steps
+
+Your app has one page. For multi-page apps with navigation, modals, and
+authentication, see `vignette("multi-page-with-auth", package = "ambolt")`.
+
+For a real-world example, see
+[Elektrifieringskollen](https://elektrifieringskollen.se) — a production
+fleet cost calculator built with ambolt.

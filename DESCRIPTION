@@ -1,0 +1,33 @@
+Package: ambolt
+Title: Web Applications with R and Svelte
+Version: 0.1.0
+Authors@R: person("Love", "Hansson", email = "love.hansson@transportforetagen.se",
+                  role = c("aut", "cre"))
+Description: Build reactive web applications using R for the backend and
+    Svelte 5 for the frontend. Provides a declarative DSL for layouts,
+    inputs, outputs, and themes. The framework generates Svelte components
+    from R declarations and serves them via ambiorix.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    ambiorix (>= 2.0.0),
+    digest,
+    jsonlite,
+    openssl,
+    sodium
+Suggests:
+    commonmark,
+    DBI,
+    knitr,
+    pkgload,
+    rmarkdown,
+    RMariaDB,
+    RSQLite,
+    svglite,
+    testthat (>= 3.0.0)
+URL: https://github.com/LCHansson/ambolt
+BugReports: https://github.com/LCHansson/ambolt/issues
+VignetteBuilder: knitr
+Config/testthat/edition: 3
