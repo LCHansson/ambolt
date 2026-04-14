@@ -15,10 +15,12 @@ export { default as RadioButtons } from './RadioButtons.svelte';
 export { default as DateInput } from './DateInput.svelte';
 export { default as DateRangeInput } from './DateRangeInput.svelte';
 export { default as SearchSelect } from './SearchSelect.svelte';
+export { default as ServerSearchInput } from './ServerSearchInput.svelte';
 export { default as ActionButton } from './ActionButton.svelte';
 
 // Output components
 export { default as PlotOutput } from './PlotOutput.svelte';
+export { default as ChartOutput } from './ChartOutput.svelte';
 export { default as DataTable } from './DataTable.svelte';
 export { default as HtmlOutput } from './HtmlOutput.svelte';
 

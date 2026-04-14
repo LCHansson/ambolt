@@ -97,6 +97,19 @@
     props <- c(props, paste0("icons={", icons_js, "}"))
   }
 
+  # Server search props (endpoint, baseUrl, debounce)
+  if (type == "server_search") {
+    if (!is.null(args$endpoint)) {
+      props <- c(props, sprintf('endpoint="%s"', args$endpoint))
+    }
+    if (!is.null(args$base_url)) {
+      props <- c(props, sprintf('baseUrl="%s"', args$base_url))
+    }
+    if (!is.null(args$debounce)) {
+      props <- c(props, sprintf("debounce={%s}", args$debounce))
+    }
+  }
+
   # Binding — depends on input type
   if (type == "action") {
     # Action buttons: onclick increments counter, no value binding

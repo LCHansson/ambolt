@@ -8,6 +8,7 @@ page_header(
   title,
   subtitle = NULL,
   actions = list(),
+  help = NULL,
   class = NULL,
   style = NULL
 )
@@ -17,7 +18,11 @@ page_header(
 
 \item{subtitle}{Character. Optional subtitle below the heading.}
 
-\item{actions}{List. Action nodes to render right-aligned (e.g., logout_button()).}
+\item{actions}{List. Action nodes to render right-aligned (e.g., create_button()).}
+
+\item{help}{Character. Raw HTML for a help button rendered inline with the
+title. On mobile, stays next to the heading while actions wrap to a
+second row.}
 
 \item{class}{Character. Additional CSS class(es).}
 

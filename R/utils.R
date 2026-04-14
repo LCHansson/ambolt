@@ -30,6 +30,7 @@
     date = "DateInput",
     date_range = "DateRangeInput",
     action = "ActionButton",
+    server_search = "ServerSearchInput",
     stop(sprintf("Unknown input type: %s", type))
   )
 }
@@ -39,6 +40,7 @@
 .output_component_name <- function(type) {
   switch(type,
     plot = "PlotOutput",
+    chart = "ChartOutput",
     table = "DataTable",
     html = "HtmlOutput",
     stop(sprintf("Unknown output type: %s", type))
@@ -50,6 +52,7 @@
 .module_output_component_name <- function(type) {
   switch(type,
     plot = "PlotOutput",
+    chart = "ChartOutput",
     table = "DataTable",
     html = "HtmlOutput",
     stats = "StatCards",
@@ -82,6 +85,7 @@
     date = format(Sys.Date(), "%Y-%m-%d"),
     date_range = format(Sys.Date(), "%Y-%m-%d"),
     action = NULL,
+    server_search = "",
     ""
   )
 }

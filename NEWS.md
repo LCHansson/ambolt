@@ -3,6 +3,27 @@
 Initial release. A web application framework for R developers, powered by
 Svelte 5 and ambiorix.
 
+## ChartOutput / SveltePlot integration (2026-04-14)
+
+- New output type: `chart` — interactive charts rendered via SveltePlot.
+  R returns a JSON spec (data + marks + scales); the frontend renders it
+  natively using SveltePlot's grammar-of-graphics components.
+- Supported marks: `line`, `dot`, `bar`, `ruleX`, `ruleY`. Extensible.
+- `@gka/svelteplot` added as npm dependency in generated package.json.
+- Registered via `app$output(id, type = "chart", render = function(params) { ... })`.
+- Files: `ChartOutput.svelte`, `utils.R`, `build.R`.
+
+## ServerSearchInput (2026-04-13)
+
+- New input type: `server_search` — server-backed typeahead search.
+  Unlike `SearchSelect` (which filters a client-side choices array), this
+  component fetches suggestions from an API endpoint with configurable debounce.
+- Props: `endpoint`, `placeholder`, `debounce` (ms), `baseUrl`, `valueField`.
+- Dropdown shows label, description snippet, and source badge per result.
+- Keyboard navigation (arrow keys, enter, escape) and clear button.
+- Registered via `app$input(id, type = "server_search", endpoint = "/api/search")`.
+- Files: `ServerSearchInput.svelte`, `utils.R`, `codegen_markup.R`, `codegen_script.R`.
+
 ## Runtime modal rendering (2026-04-11)
 
 - Modals now use the same composable layout functions as pages

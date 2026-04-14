@@ -71,11 +71,11 @@
   # Write package.json — dev mode includes "dev" script
   if (mode == "dev") {
     writeLines(
-      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13"}}',
+      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","@gka/svelteplot":"^0.12.0"}}',
       file.path(build_base, "package.json"))
   } else {
     writeLines(
-      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13"}}',
+      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","@gka/svelteplot":"^0.12.0"}}',
       file.path(build_base, "package.json"))
   }
 
@@ -204,7 +204,7 @@
 
       if (type == "plot") {
         app_env$plot_endpoint(path, render_fn)
-      } else if (type == "table") {
+      } else if (type == "table" || type == "chart") {
         app_env$data_endpoint(path, render_fn)
       } else if (type == "html") {
         app_env$.app$get(path, function(req, res) {

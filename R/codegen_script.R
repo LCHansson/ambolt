@@ -340,6 +340,8 @@
       default_val <- .get_default_value(i)
       if (i$type == "action") {
         sprintf("  let %s = $state(0);", i$id)
+      } else if (i$type == "server_search") {
+        sprintf("  let %s = $state('');", i$id)
       } else if (i$type == "checkbox") {
         sprintf("  let %s = $state(%s);", i$id, tolower(as.character(default_val)))
       } else if (i$type == "checkbox_group") {
