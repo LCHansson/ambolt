@@ -19,6 +19,13 @@
   //   filters     — array of { key, label, choices: [{value, label}] }
   //   refreshEvent — event name that triggers a re-fetch
   //   minWidth    — minimum card width in pixels (default 260)
+  //   groupBy     — { default, options, label, expandAllLabel, collapseAllLabel }
+  //                 Optional grouping by a card field. When set, items are
+  //                 partitioned by item[groupKey] into collapsible <details>
+  //                 sections. If options has multiple entries, a selector is
+  //                 shown so the user can pick the grouping field; if only
+  //                 default is given, grouping is static. Use 'none' as a
+  //                 reserved key to disable grouping.
 
   import { createFetchState } from './fetchData.svelte.js';
   import { events } from './eventBus.svelte.js';
@@ -40,8 +47,23 @@
     favorite = null,  // { key: 'is_favorite', id_key: 'id', endpoint: '/api/contacts/favorite/{id}' }
     contactAction = null,  // { event: 'ambolt:contact-action', nameKey: 'name', partyKey: 'party', modalTemplate: 'interactions/create?contact_id={id}&type={type}' }
     labels = {},  // { search: 'Sök...', noResults: 'Inga resultat', showing: 'av' }
+    groupBy = null,
     class: className = ''
   } = $props();
+
+  // ── Grouping state ──
+  // Grouping is controlled by the *current* group key (one of the keys in
+  // groupBy.options, or 'none' to disable). When a selector is rendered, the
+  // user changes this; when grouping is static, it stays at groupBy.default.
+  let groupKey = $state(groupBy?.default || 'none');
+  // Expand/collapse-all state. Toggled by the toolbar buttons; each <details>
+  // section binds its `open` attribute to a derived value off this.
+  let allExpanded = $state(true);
+  // Track per-group expansion overrides (so user can collapse one group
+  // without affecting the others); cleared when "Visa alla / Dölj alla"
+  // clicked or when grouping changes.
+  let groupOpenState = $state({});
+  $effect(() => { void groupKey; groupOpenState = {}; });
 
   const fetch_state = createFetchState(
     () => ({ endpoint, params, baseUrl }),
@@ -144,6 +166,77 @@
 
   let hasMore = $derived(displayCount > 0 && filtered.length > displayCount);
 
+  // ── Grouping ──
+  // Whether group sections are collapsible (default true). When false, the
+  // expand/collapse-all toolbar buttons are hidden and each section renders
+  // as a non-collapsing <section>.
+  let groupsCollapsible = $derived(groupBy?.collapsible !== false);
+  // groupedItems is null when grouping is off (groupKey === 'none' or no
+  // groupBy prop). When on, it's an array of
+  //   { key, label, items, visibleItems, hasMore, totalCount }
+  // in the order groups first appear in the data.
+  //
+  // Crucially, groups partition `filtered` (NOT `visibleItems`), so the count
+  // shown in each group header reflects ALL items matching the current
+  // search/filter — not just what's currently fetched/paginated. Per-group
+  // pagination is tracked in `groupDisplayCounts`; each group has its own
+  // "Visa fler" button.
+  let isGrouped = $derived(!!groupBy && groupKey && groupKey !== 'none');
+  // Per-group pagination: { groupKey: shownCount }. Reset when grouping or
+  // search/filter changes.
+  let groupDisplayCounts = $state({});
+  $effect(() => {
+    void groupKey; void searchQuery; void filterValues;
+    groupDisplayCounts = {};
+  });
+  function getGroupLimit(key) {
+    return groupDisplayCounts[key] ?? (pageSize || 50);
+  }
+  function showMoreInGroup(key) {
+    const cur = getGroupLimit(key);
+    groupDisplayCounts = { ...groupDisplayCounts, [key]: cur + (pageSize || 50) };
+  }
+  let groupedItems = $derived.by(() => {
+    if (!isGrouped) return null;
+    const buckets = new Map();  // preserves insertion order
+    for (const item of filtered) {
+      const raw = item[groupKey];
+      const key = (raw === null || raw === undefined || raw === '') ? '\u2014' : String(raw);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(item);
+    }
+    return Array.from(buckets, ([key, items]) => {
+      const limit = getGroupLimit(key);
+      const slice = limit > 0 ? items.slice(0, limit) : items;
+      return {
+        key,
+        label: key,
+        items,
+        visibleItems: slice,
+        totalCount: items.length,
+        hasMore: limit > 0 && items.length > limit,
+      };
+    });
+  });
+  // Whether group selector should render (more than one option besides "none")
+  let showGroupSelector = $derived(
+    !!groupBy?.options && Object.keys(groupBy.options).length > 1
+  );
+  function isGroupOpen(key) {
+    return groupOpenState[key] ?? allExpanded;
+  }
+  function toggleGroup(key, value) {
+    groupOpenState = { ...groupOpenState, [key]: value };
+  }
+  function expandAll() {
+    allExpanded = true;
+    groupOpenState = {};
+  }
+  function collapseAll() {
+    allExpanded = false;
+    groupOpenState = {};
+  }
+
   // ── Favorite toggle ──
   async function toggleFavorite(e, item) {
     e.stopPropagation();
@@ -177,7 +270,7 @@
 </script>
 
 <div class="ambolt-card-grid-container {className}" data-output-id={id}>
-  {#if filters.length > 0 || searchable}
+  {#if filters.length > 0 || searchable || showGroupSelector || isGrouped}
     <div class="card-toolbar">
       {#if searchable}
         <input
@@ -220,36 +313,46 @@
           </div>
         {/if}
       {/each}
+      {#if showGroupSelector}
+        <label class="card-group-select">
+          <span>{groupBy.label || 'Gruppera efter'}</span>
+          <select bind:value={groupKey}>
+            {#each Object.entries(groupBy.options) as [k, lbl]}
+              <option value={k}>{lbl}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+      {#if isGrouped && groupsCollapsible}
+        <button class="card-group-action" onclick={expandAll} type="button">
+          {groupBy.expandAllLabel || 'Visa alla'}
+        </button>
+        <button class="card-group-action" onclick={collapseAll} type="button">
+          {groupBy.collapseAllLabel || 'D\u00f6lj alla'}
+        </button>
+      {/if}
       {#if !fetch_state.loading && !fetch_state.error}
         <span class="card-count">{filtered.length} {labels.of || "of"} {allItems.length}</span>
       {/if}
     </div>
   {/if}
 
-  {#if fetch_state.error}
-    <p class="error">Kunde inte ladda data: {fetch_state.error}</p>
-  {:else if fetch_state.loading}
-    <p class="loading">Laddar...</p>
-  {:else if visibleItems.length === 0}
-    <p class="empty">{labels.noResults || "No results match the filters."}</p>
-  {:else}
-    <div class="ambolt-card-grid" style="grid-template-columns: repeat(auto-fill, minmax({minWidth}px, 1fr));">
-      {#each visibleItems as item}
-        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-        <div
-          class="ambolt-card"
-          class:clickable
-          onclick={() => clickable && onclick(item)}
-          role={clickable ? 'button' : undefined}
-          tabindex={clickable ? 0 : undefined}
-          onkeydown={(e) => {
-            if (clickable && (e.key === 'Enter' || e.key === ' ')) {
-              e.preventDefault();
-              onclick(item);
-            }
-          }}
-          style={card.border_color && item[card.border_color] ? `border-left: 4px solid ${item[card.border_color]};` : ''}
-        >
+  {#snippet renderCard(item)}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div
+      class="ambolt-card"
+      class:clickable
+      onclick={() => clickable && onclick(item)}
+      role={clickable ? 'button' : undefined}
+      tabindex={clickable ? 0 : undefined}
+      onkeydown={(e) => {
+        if (clickable && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onclick(item);
+        }
+      }}
+      style={card.border_color && item[card.border_color] ? `border-left: 4px solid ${item[card.border_color]};` : ''}
+    >
           <!-- Backdrop icon -->
           {#if card.icon && item[card.icon]}
             <i class="bi bi-{item[card.icon]} card-backdrop-icon"></i>
@@ -299,7 +402,10 @@
                         <div class="topic-badges">
                           {#each badges as badge}
                             {@const color = field.colors?.[badge] || '#666'}
-                            <span class="topic-badge" style="background:{color}22;color:{color}">{badge}</span>
+                            {@const label = field.labels?.[badge] || badge}
+                            <span class="topic-badge"
+                                  style="background:{color}22;color:{color}"
+                                  title={badge}>{label}</span>
                           {/each}
                         </div>
                       {/if}
@@ -350,11 +456,77 @@
             </div>
           {/if}
 
-          <!-- Footer -->
-          {#if card.footer && item[card.footer] != null}
-            <div class="card-footer">{item[card.footer]}</div>
+      <!-- Footer -->
+      {#if card.footer && item[card.footer] != null}
+        <div class="card-footer">{item[card.footer]}</div>
+      {/if}
+    </div>
+  {/snippet}
+
+  {#if fetch_state.error}
+    <p class="error">Kunde inte ladda data: {fetch_state.error}</p>
+  {:else if fetch_state.loading}
+    <p class="loading">Laddar...</p>
+  {:else if visibleItems.length === 0}
+    <p class="empty">{labels.noResults || "No results match the filters."}</p>
+  {:else if isGrouped && groupedItems}
+    <!--
+      Grouped render: one section per group, each with its own grid + its
+      own "Visa fler" pagination button. Group counts reflect ALL filtered
+      items in the group (not just the currently visible slice).
+      When `collapsible` is false (e.g. Utskott priority grouping), groups
+      render as plain <section> elements; otherwise as collapsible <details>.
+    -->
+    {#each groupedItems as group (group.key)}
+      {#if groupsCollapsible}
+        <details class="ambolt-card-group" data-group-key={group.key}
+                 open={isGroupOpen(group.key)}
+                 ontoggle={(e) => toggleGroup(group.key, e.currentTarget.open)}>
+          <summary class="ambolt-card-group-header">
+            <span class="ambolt-card-group-label">{group.label}</span>
+            <span class="ambolt-card-group-count">{group.totalCount}</span>
+          </summary>
+          <div class="ambolt-card-grid"
+               style="grid-template-columns: repeat(auto-fill, minmax({minWidth}px, 1fr));">
+            {#each group.visibleItems as item (item.id ?? item)}
+              {@render renderCard(item)}
+            {/each}
+          </div>
+          {#if group.hasMore}
+            <div class="card-show-more">
+              <button onclick={() => showMoreInGroup(group.key)}>
+                Visa fler ({group.totalCount - group.visibleItems.length} kvar)
+              </button>
+            </div>
           {/if}
-        </div>
+        </details>
+      {:else}
+        <section class="ambolt-card-group ambolt-card-group--static"
+                 data-group-key={group.key}>
+          <header class="ambolt-card-group-header ambolt-card-group-header--static">
+            <span class="ambolt-card-group-label">{group.label}</span>
+            <span class="ambolt-card-group-count">{group.totalCount}</span>
+          </header>
+          <div class="ambolt-card-grid"
+               style="grid-template-columns: repeat(auto-fill, minmax({minWidth}px, 1fr));">
+            {#each group.visibleItems as item (item.id ?? item)}
+              {@render renderCard(item)}
+            {/each}
+          </div>
+          {#if group.hasMore}
+            <div class="card-show-more">
+              <button onclick={() => showMoreInGroup(group.key)}>
+                Visa fler ({group.totalCount - group.visibleItems.length} kvar)
+              </button>
+            </div>
+          {/if}
+        </section>
+      {/if}
+    {/each}
+  {:else}
+    <div class="ambolt-card-grid" style="grid-template-columns: repeat(auto-fill, minmax({minWidth}px, 1fr));">
+      {#each visibleItems as item}
+        {@render renderCard(item)}
       {/each}
     </div>
 
@@ -380,6 +552,111 @@
     gap: 0.75rem;
     align-items: center;
     margin-bottom: 0.75rem;
+  }
+  /* ── Group selector + expand/collapse all ── */
+  /* Floating label: the small "Gruppera efter" caption is absolutely
+     positioned above the toolbar so the wrapper height equals the <select>
+     height, letting `align-items: center` line the select up with sibling
+     buttons. The label overflows above the toolbar's content box. */
+  .card-group-select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .card-group-select span {
+    position: absolute;
+    bottom: 100%;
+    left: 0.25rem;
+    margin-bottom: 0.15rem;
+    font-size: 0.7rem;
+    color: #6b7280;
+    white-space: nowrap;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .card-group-select select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    background: white;
+  }
+  .card-group-action {
+    padding: 0.35rem 0.7rem;
+    border: 1px solid #d1d5db;
+    background: white;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: #374151;
+  }
+  .card-group-action:hover {
+    background: #f3f4f6;
+  }
+  /* ── Group section (when grouping is active) ── */
+  .ambolt-card-group {
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fafafa;
+  }
+  .ambolt-card-group[open] {
+    background: white;
+  }
+  .ambolt-card-group-header {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
+    user-select: none;
+  }
+  .ambolt-card-group-header::-webkit-details-marker { display: none; }
+  .ambolt-card-group-header::before {
+    content: '▸';
+    color: #6b7280;
+    font-size: 0.8rem;
+    transition: transform 0.15s;
+  }
+  .ambolt-card-group[open] .ambolt-card-group-header::before {
+    content: '▾';
+  }
+  .ambolt-card-group-label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.95rem;
+  }
+  .ambolt-card-group-count {
+    background: #e5e7eb;
+    color: #6b7280;
+    border-radius: 10px;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .ambolt-card-group .ambolt-card-grid {
+    padding: 0.75rem;
+  }
+  /* Static (non-collapsible) variant: no border, no disclosure arrow,
+     just a section header and the grid. Apps style cards inside specific
+     groups via [data-group-key="..."] selectors. */
+  .ambolt-card-group--static {
+    border: none;
+    background: transparent;
+    margin-bottom: 1.5rem;
+  }
+  .ambolt-card-group-header--static {
+    cursor: default;
+    padding: 0 0 0.4rem 0;
+    border-bottom: none;
+  }
+  .ambolt-card-group-header--static::before {
+    content: none;
+  }
+  .ambolt-card-group--static .ambolt-card-grid {
+    padding: 0;
   }
   .card-search {
     padding: 0.4rem 0.6rem;

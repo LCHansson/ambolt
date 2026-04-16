@@ -16,6 +16,10 @@ export { default as DateInput } from './DateInput.svelte';
 export { default as DateRangeInput } from './DateRangeInput.svelte';
 export { default as SearchSelect } from './SearchSelect.svelte';
 export { default as ServerSearchInput } from './ServerSearchInput.svelte';
+export { default as MultiSelect } from './MultiSelect.svelte';
+export { default as RangeSlider } from './RangeSlider.svelte';
+export { default as FilterRenderer } from './FilterRenderer.svelte';
+export { default as DynamicFilters } from './DynamicFilters.svelte';
 export { default as ActionButton } from './ActionButton.svelte';
 
 // Output components

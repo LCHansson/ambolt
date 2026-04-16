@@ -122,24 +122,73 @@
       # Rich fields array
       if (!is.null(card_def$fields) && length(card_def$fields) > 0) {
         fields_var <- paste0(safe_id, "_fields")
+        # IMPORTANT: use `[[` (exact-match) instead of `$` for field lookups.
+        # R's `$` does partial matching on lists by default, so `f$label`
+        # would silently match `f$labels` (a multi-element vector) and corrupt
+        # `parts` to length-N. Same risk: `f$badge` ↔ `f$badge_color_key`.
         field_entries <- vapply(card_def$fields, function(f) {
-          parts <- sprintf("key: '%s'", f$key)
-          if (!is.null(f$icon)) parts <- paste0(parts, sprintf(", icon: '%s'", f$icon))
-          if (!is.null(f$link)) parts <- paste0(parts, sprintf(", link: '%s'", f$link))
-          if (!is.null(f$label)) parts <- paste0(parts, sprintf(", label: '%s'", f$label))
-          if (isTRUE(f$badge)) parts <- paste0(parts, ", badge: true")
-          if (!is.null(f$badge_color_key)) parts <- paste0(parts, sprintf(", badge_color_key: '%s'", f$badge_color_key))
-          if (!is.null(f$class_key)) parts <- paste0(parts, sprintf(", class_key: '%s'", f$class_key))
-          if (!is.null(f$render)) parts <- paste0(parts, sprintf(", render: '%s'", f$render))
-          if (!is.null(f$colors)) {
-            colors_js <- paste(vapply(names(f$colors), function(k) {
-              sprintf("'%s': '%s'", k, f$colors[[k]])
+          parts <- sprintf("key: '%s'", f[["key"]])
+          if (!is.null(f[["icon"]]))    parts <- paste0(parts, sprintf(", icon: '%s'", f[["icon"]]))
+          if (!is.null(f[["link"]]))    parts <- paste0(parts, sprintf(", link: '%s'", f[["link"]]))
+          if (!is.null(f[["label"]]))   parts <- paste0(parts, sprintf(", label: '%s'", f[["label"]]))
+          if (isTRUE(f[["badge"]]))     parts <- paste0(parts, ", badge: true")
+          if (!is.null(f[["badge_color_key"]])) parts <- paste0(parts, sprintf(", badge_color_key: '%s'", f[["badge_color_key"]]))
+          if (!is.null(f[["class_key"]])) parts <- paste0(parts, sprintf(", class_key: '%s'", f[["class_key"]]))
+          if (!is.null(f[["render"]]))  parts <- paste0(parts, sprintf(", render: '%s'", f[["render"]]))
+          if (!is.null(f[["colors"]])) {
+            colors_map <- f[["colors"]]
+            colors_js <- paste(vapply(names(colors_map), function(k) {
+              sprintf("'%s': '%s'", k, colors_map[[k]])
             }, character(1)), collapse = ", ")
             parts <- paste0(parts, sprintf(", colors: { %s }", colors_js))
+          }
+          # Optional `labels` map: remaps raw badge keys to display strings
+          # (e.g., "Konkurrenskraft" → "Konk"). Used by render: 'badges'. The
+          # raw key still appears as the badge's `title` (tooltip on hover).
+          if (!is.null(f[["labels"]])) {
+            labels_map <- f[["labels"]]
+            labels_js <- paste(vapply(names(labels_map), function(k) {
+              sprintf("'%s': '%s'", k, labels_map[[k]])
+            }, character(1)), collapse = ", ")
+            parts <- paste0(parts, sprintf(", labels: { %s }", labels_js))
           }
           sprintf("{ %s }", parts)
         }, character(1))
         lines <- c(lines, sprintf("  let %s = [%s];", fields_var, paste(field_entries, collapse = ", ")))
+      }
+
+      # group_by config: { default, options, label, expandAllLabel, collapseAllLabel }
+      # Drives CardGrid's grouping UI: a selector to pick the field to group by,
+      # plus expand/collapse-all buttons. See CardGrid.svelte's groupBy prop.
+      if (!is.null(mod_out$group_by)) {
+        gb <- mod_out$group_by
+        gb_var <- paste0(safe_id, "_group_by")
+        gb_parts <- character(0)
+        if (!is.null(gb$default)) {
+          gb_parts <- c(gb_parts, sprintf("default: '%s'", gb$default))
+        }
+        if (!is.null(gb$options) && length(gb$options) > 0) {
+          opts_js <- paste(vapply(names(gb$options), function(k) {
+            sprintf("'%s': '%s'", k, gb$options[[k]])
+          }, character(1)), collapse = ", ")
+          gb_parts <- c(gb_parts, sprintf("options: { %s }", opts_js))
+        }
+        if (!is.null(gb$label)) {
+          gb_parts <- c(gb_parts, sprintf("label: '%s'", gb$label))
+        }
+        if (!is.null(gb$expand_all_label)) {
+          gb_parts <- c(gb_parts, sprintf("expandAllLabel: '%s'", gb$expand_all_label))
+        }
+        if (!is.null(gb$collapse_all_label)) {
+          gb_parts <- c(gb_parts, sprintf("collapseAllLabel: '%s'", gb$collapse_all_label))
+        }
+        # collapsible: TRUE (default — render as <details> with expand/collapse),
+        # FALSE (render as plain <section>, no toolbar buttons)
+        if (isFALSE(gb$collapsible)) {
+          gb_parts <- c(gb_parts, "collapsible: false")
+        }
+        lines <- c(lines, sprintf("  let %s = { %s };",
+          gb_var, paste(gb_parts, collapse = ", ")))
       }
 
       # Filters array
@@ -341,7 +390,22 @@
       if (i$type == "action") {
         sprintf("  let %s = $state(0);", i$id)
       } else if (i$type == "server_search") {
-        sprintf("  let %s = $state('');", i$id)
+        # Two state variables: value (selected entity) and query (search text for results page)
+        paste0(sprintf("  let %s = $state('');", i$id), "\n",
+               sprintf("  let %s_query = $state('');", i$id))
+      } else if (i$type == "dynamic_filters") {
+        sprintf("  let %s = $state('{}');", i$id)
+      } else if (i$type == "multi_select") {
+        vals <- if (!is.null(i$args$value)) i$args$value else character(0)
+        sprintf("  let %s = $state([%s]);", i$id,
+                paste(sprintf("'%s'", vals), collapse = ", "))
+      } else if (i$type == "range_slider") {
+        rng <- if (!is.null(i$args$value)) i$args$value
+               else if (!is.null(i$args$min) && !is.null(i$args$max)) c(i$args$min, i$args$max)
+               else c(0, 100)
+        sprintf("  let %s = $state([%s, %s]);", i$id,
+                format(rng[1], scientific = FALSE),
+                format(rng[2], scientific = FALSE))
       } else if (i$type == "checkbox") {
         sprintf("  let %s = $state(%s);", i$id, tolower(as.character(default_val)))
       } else if (i$type == "checkbox_group") {

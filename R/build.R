@@ -58,12 +58,12 @@
   if (mode == "dev") {
     api_target <- sprintf("http://%s:%d", app_env$.host, app_env$.port)
     writeLines(sprintf(
-      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte()],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n    }\n  },\n  server: {\n    proxy: {\n      '/api': '%s'\n    }\n  }\n})",
+      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte()],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n    }\n  },\n  server: {\n    proxy: {\n      '/api': '%s'\n    }\n  }\n})",
       framework_dir_js, api_target),
       file.path(build_base, "vite.config.js"))
   } else {
     writeLines(sprintf(
-      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte()],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n    }\n  }\n})",
+      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte()],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n    }\n  }\n})",
       framework_dir_js),
       file.path(build_base, "vite.config.js"))
   }
@@ -71,11 +71,11 @@
   # Write package.json — dev mode includes "dev" script
   if (mode == "dev") {
     writeLines(
-      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","@gka/svelteplot":"^0.12.0"}}',
+      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","svelteplot":"^0.14.0"}}',
       file.path(build_base, "package.json"))
   } else {
     writeLines(
-      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","@gka/svelteplot":"^0.12.0"}}',
+      '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","svelteplot":"^0.14.0"}}',
       file.path(build_base, "package.json"))
   }
 

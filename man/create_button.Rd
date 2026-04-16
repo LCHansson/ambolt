@@ -22,7 +22,7 @@ create_button(
 
 \item{modal}{Character. Modal id to open on click.}
 
-\item{modal_size}{Character. Size of the opened modal: "sm", "md", "lg", "xl".}
+\item{modal_size}{Character. Size of the opened modal: "sm", "md", "lg", "xl", "full".}
 
 \item{navigate}{Character. Page id to navigate to on click.}
 

@@ -197,10 +197,10 @@
   {:else if node.type === 'html_block'}
     {#if node.class || node.style}
       <div class={node.class ?? ''} style={styleToString(node.style)}>
-        {@html node.html ?? ''}
+        {@html (node.html ?? '') + (node.script ? '<script>' + node.script + '<' + '/script>' : '')}
       </div>
     {:else}
-      {@html node.html ?? ''}
+      {@html (node.html ?? '') + (node.script ? '<script>' + node.script + '<' + '/script>' : '')}
     {/if}
 
   {:else}

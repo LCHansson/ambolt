@@ -221,7 +221,15 @@
     });
   });
 
-  const sizeWidths = { sm: '400px', md: '600px', lg: 'min(90vw, 1200px)', xl: 'min(95vw, 1500px)' };
+  // Modal widths. 'lg' is the standard content-modal width (~Bootstrap lg).
+  // Use 'xl' for wide dashboards/matrices, 'full' for viewport-filling.
+  const sizeWidths = {
+    sm:   '400px',
+    md:   '600px',
+    lg:   'min(90vw, 850px)',
+    xl:   'min(95vw, 1200px)',
+    full: 'calc(100vw - 2rem)',
+  };
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -394,41 +402,6 @@
   .loading {
     color: #6b7280;
   }
-  .modal-tab-bar {
-    display: flex;
-    gap: 0;
-    border-bottom: 2px solid #d1d5db;
-    margin: -0.25rem -0.25rem 1rem;
-  }
-  .modal-tab-bar button {
-    padding: 0.5rem 1rem;
-    border: none;
-    background: none;
-    font-size: 0.95rem;
-    cursor: pointer;
-    color: #6b7280;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  .modal-tab-bar button:hover {
-    color: #374151;
-  }
-  .modal-tab-bar button.active {
-    color: var(--ambolt-primary, #4f46e5);
-    border-bottom-color: var(--ambolt-primary, #4f46e5);
-    font-weight: 600;
-  }
-  .modal-tab-badge {
-    display: inline-block;
-    background: #e5e7eb;
-    color: #374151;
-    border-radius: 10px;
-    padding: 0 0.4rem;
-    font-size: 0.75rem;
-    margin-left: 0.3rem;
-    font-weight: 500;
-  }
   /* Submit button styles for HTML-body modals (mirrors FormBody) */
   .form-error-banner {
     background: #fef2f2;
@@ -502,13 +475,6 @@
       color: #374151;
       font-size: 0.9rem;
       cursor: pointer;
-    }
-    .modal-tab-bar {
-      gap: 0;
-    }
-    .modal-tab-bar button {
-      font-size: 0.8rem;
-      padding: 0.4rem 0.6rem;
     }
   }
 </style>

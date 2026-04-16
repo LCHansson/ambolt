@@ -31,6 +31,9 @@
     date_range = "DateRangeInput",
     action = "ActionButton",
     server_search = "ServerSearchInput",
+    multi_select = "MultiSelect",
+    range_slider = "RangeSlider",
+    dynamic_filters = "DynamicFilters",
     stop(sprintf("Unknown input type: %s", type))
   )
 }
@@ -86,6 +89,11 @@
     date_range = format(Sys.Date(), "%Y-%m-%d"),
     action = NULL,
     server_search = "",
+    multi_select = character(0),
+    range_slider = if (!is.null(args$value)) args$value
+                   else if (!is.null(args$min) && !is.null(args$max)) c(args$min, args$max)
+                   else c(0, 100),
+    dynamic_filters = "{}",
     ""
   )
 }

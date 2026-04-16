@@ -1,7 +1,70 @@
+# ambolt 0.1.0.9034
+
+## server_search: live-search fallback ("nödutgång") (2026-04-15)
+
+* `ServerSearchInput` gains two optional props:
+  * `liveEndpoint` — URL of a per-source live-search endpoint that accepts
+    `?source=<id>&q=<query>` and returns the same shape as the main search
+    endpoint.
+  * `liveSources` — array of `{id, label}` objects describing the sources
+    to offer buttons for.
+  When either the main endpoint reports `suggest_live: true` or the local
+  result list is empty, a small panel at the bottom of the dropdown offers
+  one button per live source. Clicking a button fetches from `liveEndpoint`
+  and merges the returned rows into the dropdown.
+* The main endpoint response may now be an object with `results` +
+  meta-fields (`status`, `count`, `suggest_live`, `query`). Callers that
+  still return a bare JSON array continue to work unchanged.
+* New codegen wiring: `app$input("x", type = "server_search",
+  live_endpoint = "/api/search/live", live_sources = list(list(id = "scb",
+  label = "SCB"), ...))` is translated into the corresponding
+  `liveEndpoint`/`liveSources` Svelte props.
+
 # ambolt 0.1.0
 
 Initial release. A web application framework for R developers, powered by
 Svelte 5 and ambiorix.
+
+## DynamicFilters input type (2026-04-15)
+
+- New input type: `dynamic_filters` — smart filter component that watches
+  another input's value and refetches a `filter_spec` from a server endpoint.
+  Renders adaptive controls via FilterRenderer; values are exposed as a
+  JSON string for ambolt's `depends_on` mechanism.
+- Bound value is a JSON string like `'{"year":[2010,2024],"gender":"T"}'`.
+- Outputs read filter values via `jsonlite::fromJSON(params$filters)`.
+- Props: `spec_endpoint`, `trigger` (other input id), `trigger_param_name`,
+  `year_min`, `year_max`.
+- Files: `DynamicFilters.svelte`, `utils.R`, `codegen_markup.R`, `codegen_script.R`.
+
+## Adaptive filter components (2026-04-15)
+
+- New input type: `range_slider` — two-handle numeric range slider via
+  `RangeSlider.svelte`. Bound value is a `[from, to]` array. Designed for
+  time periods but works for any numeric range.
+- New input type: `multi_select` — multi-select dropdown with searchable
+  options via `MultiSelect.svelte`. Bound value is an array of selected
+  codes. Choices use `{code, text}` format (vs the existing `select`'s
+  `{value, label}`).
+- New utility component: `FilterRenderer.svelte` — renders dynamic filter
+  controls from a `filter_spec` object. Groups dimensions into three
+  blocks (Tidsperiod / Geografi / Övriga) per the SU wireframe design.
+  Not yet a registered output type — meant to be embedded by app authors
+  in fas 4.3.
+- Files: `RangeSlider.svelte`, `MultiSelect.svelte`, `FilterRenderer.svelte`,
+  `utils.R`, `codegen_markup.R`, `codegen_script.R`, `index.js`.
+
+## ChartOutput tooltips + locale (2026-04-15)
+
+- `ChartOutput.svelte` now renders an `HTMLTooltip` over the chart that
+  snaps to the nearest data point on hover. Shows formatted x and y
+  values from the primary positional mark (line/dot/bar).
+- Locale defaults to `sv-SE` with explicit decimal `tickFormat` on x and y
+  axes. Suppresses SveltePlot's auto-compact notation (which would
+  otherwise render 1200 as "1.2k" / "1,2 tn").
+- x-axis: no grouping (years like 2023 stay unformatted).
+- y-axis: grouping ON (1200 → "1 200" with svensk space separator).
+- R can override locale and numberFormat via `chart_spec(locale=, number_format=)`.
 
 ## ChartOutput / SveltePlot integration (2026-04-14)
 
@@ -9,7 +72,11 @@ Svelte 5 and ambiorix.
   R returns a JSON spec (data + marks + scales); the frontend renders it
   natively using SveltePlot's grammar-of-graphics components.
 - Supported marks: `line`, `dot`, `bar`, `ruleX`, `ruleY`. Extensible.
-- `@gka/svelteplot` added as npm dependency in generated package.json.
+- `svelteplot` (^0.14.0) added as npm dependency in generated package.json.
+- Vite alias for `svelteplot` added to generated `vite.config.js` so
+  imports from components living outside the build dir can resolve.
+- Each mark receives `data` explicitly (SveltePlot marks don't inherit
+  from `<Plot>` — default is empty array).
 - Registered via `app$output(id, type = "chart", render = function(params) { ... })`.
 - Files: `ChartOutput.svelte`, `utils.R`, `build.R`.
 

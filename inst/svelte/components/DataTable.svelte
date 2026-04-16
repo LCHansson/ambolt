@@ -227,6 +227,9 @@
                     </select>
                   {:else if col.render === 'badge'}
                     <span class="ambolt-badge" data-value={row[col.key] ?? ''}>{row[col.key] ?? ''}</span>
+                  {:else if col.render === 'html'}
+                    <!-- Raw HTML — server is responsible for escaping untrusted content -->
+                    {@html row[col.key] ?? ''}
                   {:else}
                     {renderCell(row[col.key], col.render)}
                   {/if}

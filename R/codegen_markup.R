@@ -97,7 +97,7 @@
     props <- c(props, paste0("icons={", icons_js, "}"))
   }
 
-  # Server search props (endpoint, baseUrl, debounce)
+  # Server search props (endpoint, baseUrl, debounce, live-search fallback)
   if (type == "server_search") {
     if (!is.null(args$endpoint)) {
       props <- c(props, sprintf('endpoint="%s"', args$endpoint))
@@ -108,6 +108,49 @@
     if (!is.null(args$debounce)) {
       props <- c(props, sprintf("debounce={%s}", args$debounce))
     }
+    if (!is.null(args$live_endpoint)) {
+      props <- c(props, sprintf('liveEndpoint="%s"', args$live_endpoint))
+    }
+    if (!is.null(args$live_sources)) {
+      src_json <- jsonlite::toJSON(args$live_sources, auto_unbox = TRUE)
+      props <- c(props, sprintf("liveSources={%s}", src_json))
+    }
+    # Bind searchQuery to {id}_query state variable (Enter → results page)
+    props <- c(props, sprintf("bind:searchQuery={%s_query}", input_def$id))
+  }
+
+  # DynamicFilters: spec_endpoint, trigger (other input id), trigger_param_name, year bounds
+  if (type == "dynamic_filters") {
+    if (!is.null(args$spec_endpoint)) {
+      props <- c(props, sprintf('spec_endpoint="%s"', args$spec_endpoint))
+    }
+    if (!is.null(args$trigger)) {
+      # Pass the value of another input as a Svelte expression
+      props <- c(props, sprintf("trigger_value={%s}", args$trigger))
+    }
+    if (!is.null(args$trigger_param_name)) {
+      props <- c(props, sprintf('trigger_param_name="%s"', args$trigger_param_name))
+    }
+    if (!is.null(args$year_min)) {
+      props <- c(props, sprintf("year_min={%s}", args$year_min))
+    }
+    if (!is.null(args$year_max)) {
+      props <- c(props, sprintf("year_max={%s}", args$year_max))
+    }
+  }
+
+  # MultiSelect: choices is array of {code, text} (different from select's {value, label})
+  if (type == "multi_select" && !is.null(args$choices)) {
+    items <- if (is.null(names(args$choices))) {
+      vapply(args$choices, function(c) sprintf("{ code: '%s', text: '%s' }", c, c),
+             character(1))
+    } else {
+      mapply(function(code, text) sprintf("{ code: '%s', text: '%s' }", code, text),
+             args$choices, names(args$choices), SIMPLIFY = TRUE, USE.NAMES = FALSE)
+    }
+    # Replace the existing choices prop (already added above for inputs that have it)
+    props <- props[!grepl("^choices=", props)]
+    props <- c(props, sprintf("choices={[%s]}", paste(items, collapse = ", ")))
   }
 
   # Binding — depends on input type
@@ -393,6 +436,12 @@
   if (!is.null(mod_output$filters) && length(mod_output$filters) > 0) {
     filters_var <- paste0(safe_id, "_filters")
     props <- c(props, sprintf("filters={%s}", filters_var))
+  }
+
+  # Group-by (collapsible groupings)
+  if (!is.null(mod_output$group_by)) {
+    gb_var <- paste0(safe_id, "_group_by")
+    props <- c(props, sprintf("groupBy={%s}", gb_var))
   }
 
   # Searchable

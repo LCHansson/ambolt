@@ -280,7 +280,7 @@ html_block <- function(html, script = NULL, class = NULL, style = NULL) {
 #' @param navigate Character. Page id to navigate to on click.
 #' @param variant Character. "primary" (filled) or "outline" (default).
 #' @param icon Character. Bootstrap Icon name (e.g., "plus", "download").
-#' @param modal_size Character. Size of the opened modal: "sm", "md", "lg", "xl".
+#' @param modal_size Character. Size of the opened modal: "sm", "md", "lg", "xl", "full".
 #' @param href Character. URL for download/external link variant.
 #' @param download Logical. If TRUE, the `<a>` element gets the `download` attribute.
 #' @param class Character. Additional CSS class(es).
