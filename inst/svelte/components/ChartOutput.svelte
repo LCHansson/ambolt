@@ -8,7 +8,7 @@
   // Props: same as PlotOutput (id, endpoint, params, baseUrl, trigger)
 
   import { createFetchState } from './fetchData.svelte.js';
-  import { Plot, Line, BarY, BarX, Dot, RuleX, RuleY, Text, HTMLTooltip } from 'svelteplot';
+  import { Plot, Line, BarY, BarX, Dot, RuleX, RuleY, Text, Geo, HTMLTooltip } from 'svelteplot';
 
   let {
     id = '',
@@ -70,6 +70,52 @@
     };
   });
 
+  // Detect if this is a map chart (has a geo mark)
+  let geoMark = $derived(marks.find(m => m.type === 'geo'));
+  let isMap = $derived(!!geoMark);
+
+  // GeoJSON data for map charts — fetched lazily when a geo mark is present
+  let geoFeatures = $state([]);
+  // Re-derive geoMark endpoint to ensure Svelte tracks it properly.
+  // Accessing geoMark AND chartData in the same derived ensures the
+  // effect re-triggers when either changes.
+  let geoEndpoint = $derived(geoMark?.geojson_endpoint ?? '');
+  let geoDataReady = $derived(geoEndpoint !== '' && chartData.length > 0);
+
+  $effect(() => {
+    if (!geoDataReady) { geoFeatures = []; return; }
+    const ep = geoEndpoint;  // track it
+    const data = chartData;   // track it
+    console.log('[ChartOutput] Geo effect fired, endpoint:', ep, 'data rows:', data.length);
+    const base = baseUrl || window.location.origin;
+    const url = new globalThis.URL(ep, base).toString();
+    fetch(url)
+      .then(r => r.json())
+      .then(geojson => {
+        if (geojson?.features) {
+          // Join KPI data onto GeoJSON features via id_field
+          const valueMap = new Map();
+          for (const row of data) {
+            const key = row[geoMark?.fill_key] ?? row.municipality_id ?? row.municipality ?? row.id;
+            if (key) valueMap.set(String(key), row.value);
+          }
+          const joined = geojson.features.map(f => ({
+            ...f,
+            properties: {
+              ...f.properties,
+              _value: valueMap.get(f.properties[geoMark.id_field]) ?? null,
+              _name: f.properties.kom_namn ?? f.properties.name ?? ''
+            }
+          }));
+          const matched = joined.filter(f => f.properties._value != null).length;
+          console.log(`[ChartOutput] GeoJSON: ${geojson.features.length} features, ${valueMap.size} data points, ${matched} matched`);
+          console.log('[ChartOutput] Sample join:', joined[0]?.properties?.id, '→', joined[0]?.properties?._value);
+          geoFeatures = joined;
+        }
+      })
+      .catch(err => console.warn('[ChartOutput] GeoJSON fetch failed:', err));
+  });
+
   // For tooltip: identify x/y channels from first positional mark.
   // All marks in a chart_spec share the same channels (current convention).
   let primaryMark = $derived(marks.find(m =>
@@ -103,8 +149,31 @@
     <p class="error">Chart error: {fetch_state.error}</p>
   {:else if fetch_state.loading}
     <div class="loading">Loading chart...</div>
-  {:else if chartData.length === 0}
+  {:else if chartData.length === 0 && !isMap}
     <div class="empty">Ingen data</div>
+  {:else if isMap && geoFeatures.length > 0}
+    <!-- MAP MODE: choropleth via Geo mark -->
+    {#if title}
+      <div class="chart-title">{title}</div>
+    {/if}
+    <Plot
+      projection={{ type: 'mercator', domain: { type: 'FeatureCollection', features: geoFeatures } }}
+      color={{ type: 'linear', scheme: 'blues', domain: [
+        Math.min(...geoFeatures.map(f => f.properties._value).filter(v => v != null && isFinite(v))),
+        Math.max(...geoFeatures.map(f => f.properties._value).filter(v => v != null && isFinite(v)))
+      ] }}
+      height={500}
+    >
+      <Geo
+        data={geoFeatures}
+        fill={(d) => d.properties._value}
+        stroke={geoMark.stroke ?? '#fff'}
+        strokeWidth={geoMark.strokeWidth ?? 0.5}
+        title={(d) => `${d.properties._name}: ${d.properties._value != null ? d.properties._value : 'Ingen data'}`}
+      />
+    </Plot>
+  {:else if isMap}
+    <div class="loading">Laddar kartdata...</div>
   {:else}
     {#if title}
       <div class="chart-title">{title}</div>
