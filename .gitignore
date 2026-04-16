@@ -7,3 +7,4 @@ doc
 Meta
 .ambolt_build
 node_modules
+package-lock.json
