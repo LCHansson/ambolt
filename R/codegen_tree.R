@@ -56,6 +56,7 @@
     section = .render_tree_section(node, inputs, outputs, port, module_outputs),
     columns = .render_tree_columns(node, inputs, outputs, port, module_outputs),
     details = .render_tree_details(node, inputs, outputs, port, module_outputs),
+    sidebar_layout = .render_tree_sidebar_layout(node, inputs, outputs, port, module_outputs),
     page_content = .render_tree_page_content(node, inputs, outputs, port, module_outputs),
     page_header = .render_tree_page_header(node),
     stat_cards = .render_tree_stat_cards(node, module_outputs),
@@ -168,6 +169,20 @@
   }
 
   block
+}
+
+#' Render a sidebar_layout node nested inside another layout (e.g. page_content).
+#'
+#' Produces a two-column grid identical to the top-level sidebar_layout
+#' template but as an inline HTML block (no wrapping <main>/<style>).
+#' CSS for .sidebar-layout/.sidebar/.content is provided by the
+#' top-level template that contains it.
+#' @noRd
+.render_tree_sidebar_layout <- function(node, inputs, outputs, port, module_outputs = NULL) {
+  sidebar_html <- .render_tree_children(node$sidebar$children, inputs, outputs, port, module_outputs)
+  content_html <- .render_tree_children(node$main$children, inputs, outputs, port, module_outputs)
+  sprintf('    <div class="sidebar-layout">\n      <div class="sidebar">\n%s\n      </div>\n      <div class="content">\n%s\n      </div>\n    </div>',
+    sidebar_html, content_html)
 }
 
 # --- Pages-mode node renderers --------------------------------------

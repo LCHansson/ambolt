@@ -1,3 +1,33 @@
+# ambolt 0.1.0.9036
+
+## page_content as top-level layout (2026-04-18)
+
+* `app$ui()` now accepts `page_content()` as the top-level layout node,
+  in addition to the existing `sidebar_layout()`. This enables fluid
+  full-width layouts analogous to Shiny's `fluidPage()`.
+* `sidebar_layout()` can be nested inside `page_content()` (or any other
+  container node). The codegen emits the same `.sidebar-layout` /
+  `.sidebar` / `.content` CSS classes so nested sidebars get framework
+  styling automatically.
+* Example:
+  ```r
+  app$ui(page_content(
+    section("Search", "query"),
+    sidebar_layout(
+      sidebar = sidebar(section("Filters", "filters")),
+      main = main("chart", "commentary")
+    )
+  ))
+  ```
+
+## ChartOutput: Geo mark fixes (2026-04-18)
+
+* Fixed data join bug in map/choropleth rendering: the join key now
+  correctly uses `geoMark.id_field` (from `mark_geo(id_field = ...)`)
+  instead of the non-existent `geoMark.fill_key` property.
+* Map borders now use the R-specified `stroke`/`strokeWidth` from the
+  mark spec, with darker defaults (#333 @ 0.8px vs #666 @ 0.5px).
+
 # ambolt 0.1.0.9034
 
 ## server_search: live-search fallback ("nödutgång") (2026-04-15)

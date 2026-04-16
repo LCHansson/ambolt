@@ -95,6 +95,72 @@
     extra_css)
 }
 
+#' Render page_content as top-level layout.
+#'
+#' Full-width flex column with the same CSS variables as sidebar_layout
+#' (so nested sidebar_layout nodes get their styling). Analogous to
+#' Shiny's fluidPage().
+#' @noRd
+.render_page_content_toplevel <- function(content_html, extra_css) {
+  sprintf('
+<main>
+  <div class="ambolt-page-content">
+%s
+  </div>
+</main>
+
+<style>
+  :root {
+    --ambolt-font: system-ui, sans-serif;
+    --ambolt-max-width: 1200px;
+    --ambolt-sidebar-width: 280px;
+    --ambolt-gap: 2rem;
+    --ambolt-sidebar-bg: white;
+    --ambolt-sidebar-border: 1px solid #d1d5db;
+    --ambolt-sidebar-radius: 6px;
+    --ambolt-sidebar-padding: 1.5rem;
+    --ambolt-content-gap: 1.5rem;
+    --ambolt-breakpoint: 768px;
+  }
+  main {
+    font-family: var(--ambolt-font);
+    max-width: var(--ambolt-max-width);
+    margin: var(--ambolt-margin, 2rem auto);
+    padding: var(--ambolt-padding, 0 1rem);
+  }
+  .ambolt-page-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ambolt-content-gap);
+  }
+  /* Nested sidebar_layout inside page_content */
+  .sidebar-layout {
+    display: grid;
+    grid-template-columns: var(--ambolt-sidebar-width) 1fr;
+    gap: var(--ambolt-gap);
+  }
+  .sidebar {
+    border: var(--ambolt-sidebar-border);
+    border-radius: var(--ambolt-sidebar-radius);
+    padding: var(--ambolt-sidebar-padding);
+    background: var(--ambolt-sidebar-bg);
+    align-self: start;
+  }
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ambolt-content-gap);
+  }
+  @media (max-width: 768px) {
+    main { padding: 0 0.5rem; margin: 1rem auto; }
+    .sidebar-layout { grid-template-columns: 1fr; gap: 1rem; }
+    .sidebar { padding: 1rem; }
+  }%s
+</style>',
+    content_html,
+    extra_css)
+}
+
 # --- App.svelte orchestrator -------------------------------------
 
 #' Generate the full App.svelte content
@@ -195,10 +261,30 @@
 }
 
 #' Generate markup from a layout tree (new mode).
+#'
+#' Supports two top-level layout types:
+#'   - sidebar_layout: traditional two-column sidebar + content
+#'   - page_content:   full-width stacked layout (can nest sidebar_layout)
 #' @noRd
 .generate_from_tree <- function(ui_tree, inputs, outputs, port, empty_state, scenarios) {
-  stopifnot(ui_tree$type == "sidebar_layout")
+  stopifnot(ui_tree$type %in% c("sidebar_layout", "page_content"))
 
+  # Always emit DSL primitive CSS — modals can use these at runtime
+  # regardless of what the page tree contains (RenderNode.svelte).
+  extra_css <- paste0(
+    .generate_empty_state_css(empty_state),
+    .generate_tooltip_css(inputs),
+    .generate_section_css(TRUE),
+    .generate_columns_css(TRUE),
+    .generate_details_css(TRUE)
+  )
+
+  if (ui_tree$type == "page_content") {
+    return(.generate_from_tree_page_content(ui_tree, inputs, outputs, port,
+                                            empty_state, scenarios, extra_css))
+  }
+
+  # --- sidebar_layout (original path) ---
   # Render sidebar children individually so we can wrap action buttons
   sidebar_parts <- vapply(ui_tree$sidebar$children, function(child) {
     tag <- .render_tree_node(child, inputs, outputs, port)
@@ -226,17 +312,19 @@
   # Wrap content with empty state / trigger display logic
   content_html <- .wrap_content_with_empty_state(content_items, outputs, empty_state, scenarios)
 
-  # Always emit DSL primitive CSS — modals can use these at runtime
-  # regardless of what the page tree contains (RenderNode.svelte).
-  extra_css <- paste0(
-    .generate_empty_state_css(empty_state),
-    .generate_tooltip_css(inputs),
-    .generate_section_css(TRUE),
-    .generate_columns_css(TRUE),
-    .generate_details_css(TRUE)
-  )
-
   list(markup = .render_sidebar_layout(list(sidebar_html), content_html, extra_css))
+}
+
+#' Generate markup when the top-level node is page_content.
+#'
+#' Renders all children (sections, outputs, nested sidebar_layout, etc.)
+#' via the tree walker and wraps them in a full-width flex container.
+#' @noRd
+.generate_from_tree_page_content <- function(ui_tree, inputs, outputs, port,
+                                             empty_state, scenarios, extra_css) {
+  content_items <- .render_tree_children(ui_tree$children, inputs, outputs, port)
+  content_html <- .wrap_content_with_empty_state(content_items, outputs, empty_state, scenarios)
+  list(markup = .render_page_content_toplevel(content_html, extra_css))
 }
 
 #' Generate markup from legacy implicit layout (backward compatible).

@@ -94,23 +94,38 @@
       .then(geojson => {
         if (geojson?.features) {
           // Join KPI data onto GeoJSON features via id_field
+          const joinField = geoMark.id_field ?? 'id';
           const valueMap = new Map();
           for (const row of data) {
-            const key = row[geoMark?.fill_key] ?? row.municipality_id ?? row.municipality ?? row.id;
-            if (key) valueMap.set(String(key), row.value);
+            const key = row[joinField];
+            if (key != null) valueMap.set(String(key), row.value);
           }
           const joined = geojson.features.map(f => ({
             ...f,
             properties: {
               ...f.properties,
-              _value: valueMap.get(f.properties[geoMark.id_field]) ?? null,
+              _value: valueMap.get(f.properties[joinField]) ?? null,
               _name: f.properties.kom_namn ?? f.properties.name ?? ''
             }
           }));
-          const matched = joined.filter(f => f.properties._value != null).length;
+          // Also join fill_color (pre-computed in R for reliable choropleth)
+          const colorMap = new Map();
+          for (const row of data) {
+            const key = row[joinField];
+            if (key != null && row.fill_color) colorMap.set(String(key), row.fill_color);
+          }
+
+          const final = joined.map(f => ({
+            ...f,
+            properties: {
+              ...f.properties,
+              _fill: colorMap.get(f.properties[joinField]) ?? '#f0f0f0'
+            }
+          }));
+
+          const matched = final.filter(f => f.properties._value != null).length;
           console.log(`[ChartOutput] GeoJSON: ${geojson.features.length} features, ${valueMap.size} data points, ${matched} matched`);
-          console.log('[ChartOutput] Sample join:', joined[0]?.properties?.id, '→', joined[0]?.properties?._value);
-          geoFeatures = joined;
+          geoFeatures = final;
         }
       })
       .catch(err => console.warn('[ChartOutput] GeoJSON fetch failed:', err));
@@ -158,18 +173,16 @@
     {/if}
     <Plot
       projection={{ type: 'mercator', domain: { type: 'FeatureCollection', features: geoFeatures } }}
-      color={{ type: 'linear', scheme: 'blues', domain: [
-        Math.min(...geoFeatures.map(f => f.properties._value).filter(v => v != null && isFinite(v))),
-        Math.max(...geoFeatures.map(f => f.properties._value).filter(v => v != null && isFinite(v)))
-      ] }}
-      height={500}
+      height={600}
+      marginLeft={0}
+      marginRight={0}
     >
       <Geo
         data={geoFeatures}
-        fill={(d) => d.properties._value}
-        stroke={geoMark.stroke ?? '#fff'}
-        strokeWidth={geoMark.strokeWidth ?? 0.5}
-        title={(d) => `${d.properties._name}: ${d.properties._value != null ? d.properties._value : 'Ingen data'}`}
+        fill={(d) => d.properties._fill}
+        stroke={geoMark.stroke ?? '#333'}
+        strokeWidth={geoMark.strokeWidth ?? 0.8}
+        title={(d) => `${d.properties._name}: ${d.properties._value != null ? new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 1}).format(d.properties._value) : 'Ingen data'}`}
       />
     </Plot>
   {:else if isMap}
