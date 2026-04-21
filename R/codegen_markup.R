@@ -139,6 +139,20 @@
     }
   }
 
+  # SearchResultsPanel: bind query to a state variable (typically kpi_search_query)
+  if (type == "search_results_panel") {
+    if (!is.null(args$query_var)) {
+      props <- c(props, sprintf("query={%s}", args$query_var))
+    }
+  }
+
+  # MultiViewPanel: bind filters to a state variable
+  if (type == "multi_view_panel") {
+    if (!is.null(args$filters_var)) {
+      props <- c(props, sprintf("filters={%s}", args$filters_var))
+    }
+  }
+
   # MultiSelect: choices is array of {code, text} (different from select's {value, label})
   if (type == "multi_select" && !is.null(args$choices)) {
     items <- if (is.null(names(args$choices))) {
@@ -161,6 +175,8 @@
     if (!is.null(args$requires)) {
       props <- c(props, sprintf("disabled={!%s_valid}", id))
     }
+  } else if (type %in% c("search_results_panel", "multi_view_panel")) {
+    # No value binding — display-only components driven by props
   } else {
     binding <- switch(type,
       checkbox = sprintf("bind:checked={%s}", id),

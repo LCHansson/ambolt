@@ -77,6 +77,7 @@ create_app <- function(
   app_env$.empty_state <- NULL
   app_env$.scenarios <- list()
   app_env$.theme_css <- NULL
+  app_env$.init_script <- NULL
   app_env$.sections <- list()
   app_env$.meta <- list(title = "ambolt app", lang = "en")
   app_env$.ui_tree <- NULL
@@ -561,6 +562,11 @@ create_app <- function(
   # Start the application
   #
   # If Stage 2 declarations exist (inputs/outputs), generates the Svelte
+  # --- Init script (custom JS injected after Svelte mount) ---
+  app_env$init_script <- function(js) {
+    app_env$.init_script <- paste0(app_env$.init_script %||% "", "\n", js)
+  }
+
   # frontend, builds it, and serves it alongside the R API.
   # Otherwise, just starts the API server (Stage 1 mode).
   #

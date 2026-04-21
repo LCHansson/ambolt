@@ -34,6 +34,7 @@
   let loading = $state(false);
   let error = $state(null);
   let filterValues = $state({});
+  let multiMode = $state(false);  // true when multi-KPI trigger is active
 
   async function fetchSpec(triggerVal) {
     if (!triggerVal) {
@@ -51,7 +52,14 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       spec = data;
-      filterValues = {};
+      // Preserve existing filter values that still exist in the new spec.
+      // Only clear values for dimensions that no longer exist.
+      const newDimNames = new Set((data.dimensions ?? []).map(d => d.name));
+      const preserved = {};
+      for (const [k, v] of Object.entries(filterValues)) {
+        if (newDimNames.has(k)) preserved[k] = v;
+      }
+      filterValues = preserved;
     } catch (err) {
       error = err.message;
       spec = null;
@@ -60,9 +68,30 @@
     }
   }
 
-  // Refetch spec when trigger value changes
+  // Refetch spec when trigger value changes (skip if multi-mode is active)
   $effect(() => {
-    fetchSpec(trigger_value);
+    if (!multiMode) {
+      fetchSpec(trigger_value);
+    }
+  });
+
+  // KPI → view letter mapping (set by MultiViewPanel for badge display)
+  let kpiViewMap = $state({});
+
+  // Listen for multi-KPI trigger override from MultiViewPanel
+  $effect(() => {
+    function handleMultiTrigger(e) {
+      const values = e.detail?.values;
+      if (values && values.length > 0) {
+        multiMode = true;
+        fetchSpec(values.join(','));
+      }
+      if (e.detail?.kpiViewMap) {
+        kpiViewMap = e.detail.kpiViewMap;
+      }
+    }
+    document.addEventListener('ambolt:filter-trigger', handleMultiTrigger);
+    return () => document.removeEventListener('ambolt:filter-trigger', handleMultiTrigger);
   });
 
   // Serialize filter values to JSON string for ambolt's depends_on mechanism
@@ -82,6 +111,7 @@
       bind:value={filterValues}
       yearMin={year_min}
       yearMax={year_max}
+      {kpiViewMap}
     />
   {:else}
     <div class="dynamic-filters-empty">Välj ett nyckeltal för att se filter.</div>

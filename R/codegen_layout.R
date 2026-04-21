@@ -216,6 +216,12 @@
     markup <- paste0(markup, "\n<Modal />\n<Toast />")
   }
 
+  # Append BasketPanel if app uses SearchResultsPanel (basket-enabled)
+  has_basket <- any(vapply(inputs, function(i) i$type == "search_results_panel", logical(1)))
+  if (has_basket) {
+    markup <- paste0(markup, "\n<BasketPanel />")
+  }
+
   # Wrap in AuthGuard if auth is configured
   if (!is.null(auth)) {
     login_title <- auth$login_title %||% app_env$.meta$title %||% "Logga in"

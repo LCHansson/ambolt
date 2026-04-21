@@ -12,6 +12,8 @@ export { default as SliderInput } from './SliderInput.svelte';
 export { default as CheckboxInput } from './CheckboxInput.svelte';
 export { default as CheckboxGroupInput } from './CheckboxGroupInput.svelte';
 export { default as RadioButtons } from './RadioButtons.svelte';
+export { default as VizTypeSelector } from './VizTypeSelector.svelte';
+export { default as SearchResultsPanel } from './SearchResultsPanel.svelte';
 export { default as DateInput } from './DateInput.svelte';
 export { default as DateRangeInput } from './DateRangeInput.svelte';
 export { default as SearchSelect } from './SearchSelect.svelte';
@@ -51,6 +53,11 @@ export { modal } from './modalStore.svelte.js';
 
 // Notifications
 export { default as Toast } from './Toast.svelte';
+
+// Basket store and panel
+export { basket } from './basketStore.svelte.js';
+export { default as BasketPanel } from './BasketPanel.svelte';
+export { default as MultiViewPanel } from './MultiViewPanel.svelte';
 
 // Event bus
 export { events } from './eventBus.svelte.js';

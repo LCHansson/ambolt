@@ -376,6 +376,12 @@
     all_components <- c(all_components, "ViewSwitcher")
   }
 
+  # Add BasketPanel if app uses search_results_panel
+  if (any(vapply(inputs, function(i) i$type == "search_results_panel", logical(1)))) {
+    all_components <- c(all_components, "BasketPanel")
+  }
+  # MultiViewPanel is imported by name in the component — no codegen needed
+
   all_components <- unique(all_components)
   import_line <- if (length(all_components) > 0) {
     sprintf("  import { %s } from 'ambolt';", paste(all_components, collapse = ", "))
@@ -387,7 +393,10 @@
   state_lines <- if (length(inputs) > 0) {
     vapply(inputs, function(i) {
       default_val <- .get_default_value(i)
-      if (i$type == "action") {
+      if (i$type %in% c("search_results_panel", "multi_view_panel")) {
+        # No state variable — display-only components driven by props
+        ""
+      } else if (i$type == "action") {
         sprintf("  let %s = $state(0);", i$id)
       } else if (i$type == "server_search") {
         # Two state variables: value (selected entity) and query (search text for results page)

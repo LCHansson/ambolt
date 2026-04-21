@@ -1,6 +1,6 @@
 Package: ambolt
 Title: Web Applications with R and Svelte
-Version: 0.1.0.9036
+Version: 0.1.0.9047
 Authors@R: person("Love", "Hansson", email = "love.hansson@transportforetagen.se",
                   role = c("aut", "cre"))
 Description: Build reactive web applications using R for the backend and
