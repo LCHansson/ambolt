@@ -59,12 +59,12 @@
   if (mode == "dev") {
     api_target <- sprintf("http://%s:%d", app_env$.host, app_env$.port)
     writeLines(sprintf(
-      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte()],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n      'd3-geo': resolve('node_modules/d3-geo'),\n    }\n  },\n  server: {\n    proxy: {\n      '/api': '%s'\n    }\n  }\n})",
+      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte({\n    onwarn: (warning, handler) => {\n      if (warning.code === 'css_unused_selector') return;\n      handler(warning);\n    }\n  })],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n      'd3-geo': resolve('node_modules/d3-geo'),\n    }\n  },\n  server: {\n    proxy: {\n      '/api': '%s'\n    }\n  }\n})",
       framework_dir_js, api_target),
       file.path(build_base, "vite.config.js"))
   } else {
     writeLines(sprintf(
-      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte()],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n      'd3-geo': resolve('node_modules/d3-geo'),\n    }\n  }\n})",
+      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte({\n    onwarn: (warning, handler) => {\n      if (warning.code === 'css_unused_selector') return;\n      handler(warning);\n    }\n  })],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n      'd3-geo': resolve('node_modules/d3-geo'),\n    }\n  }\n})",
       framework_dir_js),
       file.path(build_base, "vite.config.js"))
   }

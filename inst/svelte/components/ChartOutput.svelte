@@ -58,6 +58,114 @@
 
   // Detect if this is a map chart (has a geo mark)
   let geoMark = $derived(marks.find(m => m.type === 'geo'));
+
+  // Legend toggle (persisted per-instance, default visible)
+  let legendVisible = $state(true);
+  let hasLegend = $derived(
+    !!legend && (legend.items?.length > 0 || legend.linetype_items?.length > 0)
+  );
+  let overcrowded = $derived(
+    hasLegend && (legend.items?.length ?? 0) > 10
+  );
+
+  // Container ref for SVG download (clone the <svg> inside)
+  let chartContainer;
+
+  // Inline computed CSS into the cloned SVG so the exported file renders
+  // standalone (browser inheritance + custom CSS otherwise lost).
+  function inlineComputedStyles(srcSvg, destSvg) {
+    const srcNodes = srcSvg.querySelectorAll('*');
+    const destNodes = destSvg.querySelectorAll('*');
+    const props = [
+      'font-family', 'font-size', 'font-weight', 'fill', 'stroke',
+      'stroke-width', 'stroke-dasharray', 'stroke-opacity', 'fill-opacity',
+      'opacity', 'text-anchor', 'dominant-baseline'
+    ];
+    for (let i = 0; i < srcNodes.length; i++) {
+      const cs = window.getComputedStyle(srcNodes[i]);
+      const styleStr = props.map(p => `${p}:${cs.getPropertyValue(p)}`).join(';');
+      destNodes[i].setAttribute('style', styleStr);
+    }
+  }
+
+  function getChartSvg() {
+    if (!chartContainer) return null;
+    return chartContainer.querySelector('svg');
+  }
+
+  function sluggify(name) {
+    if (!name) return 'chart';
+    return String(name)
+      .replace(/[^a-zA-Z0-9åäöÅÄÖ_\-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || 'chart';
+  }
+
+  function buildFilename(ext) {
+    const slug = sluggify(title);
+    const date = new Date().toISOString().slice(0, 10);
+    return `${slug}_${date}.${ext}`;
+  }
+
+  function exportSvg() {
+    const src = getChartSvg();
+    if (!src) return;
+    const clone = src.cloneNode(true);
+    // Ensure width/height attrs are explicit
+    const rect = src.getBoundingClientRect();
+    clone.setAttribute('width', Math.round(rect.width));
+    clone.setAttribute('height', Math.round(rect.height));
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    inlineComputedStyles(src, clone);
+    const xml = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+    triggerDownload(blob, buildFilename('svg'));
+  }
+
+  function exportPng() {
+    const src = getChartSvg();
+    if (!src) return;
+    const clone = src.cloneNode(true);
+    const rect = src.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    inlineComputedStyles(src, clone);
+    const xml = new XMLSerializer().serializeToString(clone);
+    const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      const scale = window.devicePixelRatio || 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * scale;
+      canvas.height = h * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        if (blob) triggerDownload(blob, buildFilename('png'));
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); };
+    img.src = url;
+  }
+
+  function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  }
   let isMap = $derived(!!geoMark);
 
   // GeoJSON data for map charts — fetched lazily when a geo mark is present
@@ -68,10 +176,16 @@
   let geoEndpoint = $derived(geoMark?.geojson_endpoint ?? '');
   let geoDataReady = $derived(geoEndpoint !== '' && chartData.length > 0);
 
+  // Tracks whether the GeoJSON fetch + join is in flight so the map view
+  // can show a loading overlay (B2). Reset on every geo effect re-run.
+  let geoJoining = $state(false);
+
   $effect(() => {
-    if (!geoDataReady) { geoFeatures = []; return; }
+    if (!geoDataReady) { geoFeatures = []; geoJoining = false; return; }
     const ep = geoEndpoint;  // track it
     const data = chartData;   // track it
+    geoJoining = true;
+    const t0 = performance.now();
     // Geo effect: fetch GeoJSON and join KPI data
     const base = baseUrl || window.location.origin;
     const url = new globalThis.URL(ep, base).toString();
@@ -79,6 +193,7 @@
       .then(r => r.json())
       .then(geojson => {
         if (geojson?.features) {
+          const tFetch = performance.now();
           // Join KPI data onto GeoJSON features via id_field
           const joinField = geoMark.id_field ?? 'id';
           const valueMap = new Map();
@@ -86,35 +201,32 @@
             const key = row[joinField];
             if (key != null) valueMap.set(String(key), row.value);
           }
-          const joined = geojson.features.map(f => ({
-            ...f,
-            properties: {
-              ...f.properties,
-              _value: valueMap.get(f.properties[joinField]) ?? null,
-              _name: f.properties.kom_namn ?? f.properties.name ?? ''
-            }
-          }));
           // Also join fill_color (pre-computed in R for reliable choropleth)
           const colorMap = new Map();
           for (const row of data) {
             const key = row[joinField];
             if (key != null && row.fill_color) colorMap.set(String(key), row.fill_color);
           }
-
-          const final = joined.map(f => ({
+          const final = geojson.features.map(f => ({
             ...f,
             properties: {
               ...f.properties,
+              _value: valueMap.get(f.properties[joinField]) ?? null,
+              _name: f.properties.kom_namn ?? f.properties.name ?? '',
               _fill: colorMap.get(f.properties[joinField]) ?? '#f0f0f0'
             }
           }));
-
-          const matched = final.filter(f => f.properties._value != null).length;
-          // GeoJSON join complete: ${matched}/${geojson.features.length} features matched
+          const tJoin = performance.now();
+          console.debug(
+            `[ChartOutput] map ${ep}: fetch ${(tFetch - t0).toFixed(0)}ms`
+            + `, join ${(tJoin - tFetch).toFixed(0)}ms`
+            + `, features ${geojson.features.length}`
+          );
           geoFeatures = final;
         }
       })
-      .catch(err => console.warn('[ChartOutput] GeoJSON fetch failed:', err));
+      .catch(err => console.warn('[ChartOutput] GeoJSON fetch failed:', err))
+      .finally(() => { geoJoining = false; });
   });
 
   // For tooltip: identify x/y channels from first positional mark.
@@ -243,6 +355,20 @@
     return out;
   });
 
+  // B4: when the cursor is in the right portion of the viewport, flag the
+  // chart so the HTMLTooltip flips to the left of the cursor via CSS.
+  // SveltePlot's tooltip is positioned with `left: <x>px` post-render —
+  // we leave that positioning intact and translate the tooltip back with
+  // CSS transform so the viewport doesn't expand horizontally.
+  let tooltipFlip = $state(false);
+  function onMouseMove(e) {
+    // Only mutate when the threshold crossing actually changes the flag
+    // — mousemove fires ~constantly and unnecessary $state writes would
+    // re-run any derived that touches tooltipFlip.
+    const flip = e.clientX > window.innerWidth * 0.65;
+    if (flip !== tooltipFlip) tooltipFlip = flip;
+  }
+
   function tooltipRows(datum) {
     if (!datum) return [];
     const keys = Object.keys(datum);
@@ -268,7 +394,32 @@
   }
 </script>
 
-<div class="ambolt-chart-output" data-output-id={id}>
+<div class="ambolt-chart-output" data-output-id={id}
+     class:tooltip-flip={tooltipFlip}
+     onmousemove={onMouseMove}
+     role="presentation"
+     bind:this={chartContainer}>
+  {#if !fetch_state.error && !fetch_state.loading && (chartData.length > 0 || isGrid || geoFeatures.length > 0)}
+    <div class="chart-controls">
+      {#if hasLegend}
+        <button type="button" class="chart-ctrl-btn"
+                onclick={() => legendVisible = !legendVisible}
+                title={legendVisible ? 'Dölj förklaring' : 'Visa förklaring'}>
+          <i class="bi bi-{legendVisible ? 'eye' : 'eye-slash'}"></i>
+          {legendVisible ? 'Dölj' : 'Visa'} förklaring
+        </button>
+      {/if}
+      <span class="chart-ctrl-spacer"></span>
+      <button type="button" class="chart-ctrl-btn" onclick={exportPng}
+              title="Ladda ner som PNG-bild">
+        <i class="bi bi-image"></i> PNG
+      </button>
+      <button type="button" class="chart-ctrl-btn" onclick={exportSvg}
+              title="Ladda ner som SVG-vektorgrafik">
+        <i class="bi bi-filetype-svg"></i> SVG
+      </button>
+    </div>
+  {/if}
   {#if fetch_state.error}
     <p class="error">Chart error: {fetch_state.error}</p>
   {:else if fetch_state.loading}
@@ -321,20 +472,27 @@
     {#if title}
       <div class="chart-title">{title}</div>
     {/if}
-    <Plot
-      projection={{ type: geoConicEqualArea, domain: { type: 'FeatureCollection', features: geoFeatures } }}
-      height={600}
-      marginLeft={0}
-      marginRight={0}
-    >
-      <Geo
-        data={geoFeatures}
-        fill={(d) => d.properties._fill}
-        stroke={geoMark.stroke ?? '#333'}
-        strokeWidth={geoMark.strokeWidth ?? 0.8}
-        title={(d) => `${d.properties._name}: ${d.properties._value != null ? new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 1}).format(d.properties._value) : 'Ingen data'}`}
-      />
-    </Plot>
+    <div class="map-wrap">
+      <Plot
+        projection={{ type: geoConicEqualArea, domain: { type: 'FeatureCollection', features: geoFeatures } }}
+        height={600}
+        marginLeft={0}
+        marginRight={0}
+      >
+        <Geo
+          data={geoFeatures}
+          fill={(d) => d.properties._fill}
+          stroke={geoMark.stroke ?? '#333'}
+          strokeWidth={geoMark.strokeWidth ?? 0.8}
+          title={(d) => `${d.properties._name}: ${d.properties._value != null ? new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 1}).format(d.properties._value) : 'Ingen data'}`}
+        />
+      </Plot>
+      {#if geoJoining}
+        <div class="map-loading-overlay" aria-live="polite">
+          <div class="spinner" aria-label="Uppdaterar karta..."></div>
+        </div>
+      {/if}
+    </div>
     {#if legend?.items}
       <div class="chart-legend">
         {#each legend.items as item}
@@ -352,7 +510,12 @@
       </div>
     {/if}
   {:else if isMap}
-    <div class="loading">Laddar kartdata...</div>
+    <div class="map-wrap map-wrap-empty">
+      <div class="map-loading-overlay map-loading-overlay-empty">
+        <div class="spinner" aria-label="Laddar karta..."></div>
+        <div class="spinner-label">Laddar karta…</div>
+      </div>
+    </div>
   {:else}
     {#if title}
       <div class="chart-title">{title}</div>
@@ -416,18 +579,20 @@
             r={mark.r ?? 3}
           />
         {:else if mark.type === 'bar'}
+          {@const isFieldFillY = typeof mark.fill === 'string' && !mark.fill.startsWith('#')}
           <BarY
             data={chartData}
             x={mark.x}
             y={mark.y}
-            fill={mark.fill ?? undefined}
+            fill={isFieldFillY ? (d) => d[mark.fill] : (mark.fill ?? undefined)}
           />
         {:else if mark.type === 'barH'}
+          {@const isFieldFillX = typeof mark.fill === 'string' && !mark.fill.startsWith('#')}
           <BarX
             data={mark.sort ? [...chartData].sort((a, b) => a[mark.x] - b[mark.x]) : chartData}
             x={mark.x}
             y={mark.y}
-            fill={mark.fill ?? undefined}
+            fill={isFieldFillX ? (d) => d[mark.fill] : (mark.fill ?? undefined)}
           />
         {:else if mark.type === 'text'}
           <Text
@@ -473,6 +638,37 @@
         {/if}
       {/snippet}
     </Plot>
+    {#if hasLegend && legendVisible}
+      <div class="chart-legend chart-legend-cat" class:overcrowded>
+        {#if legend.items?.length > 0}
+          {#if legend.stroke_label}
+            <span class="chart-legend-title">Färg</span>
+          {/if}
+          {#each legend.items as item}
+            <span class="chart-legend-item">
+              <span class="chart-legend-swatch" style="background:{item.color}"></span>
+              {item.label}
+            </span>
+          {/each}
+        {/if}
+        {#if legend.linetype_items?.length > 0}
+          <span class="chart-legend-title">Linjetyp</span>
+          {#each legend.linetype_items as item}
+            <span class="chart-legend-item">
+              <svg class="chart-legend-dash" width="24" height="8" viewBox="0 0 24 8">
+                <line x1="0" y1="4" x2="24" y2="4"
+                      stroke="#4A5568" stroke-width="2"
+                      stroke-dasharray={item.dash === 'solid' ? '' : item.dash} />
+              </svg>
+              {item.label}
+            </span>
+          {/each}
+        {/if}
+        {#if overcrowded}
+          <span class="chart-legend-hint">Hovra över en linje i grafen för att se exakt värde</span>
+        {/if}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -483,6 +679,61 @@
     padding: 1rem;
     background: white;
     min-height: 100px;
+  }
+  .chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+  }
+  .chart-ctrl-spacer { flex: 1 1 auto; }
+  .chart-ctrl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    background: white;
+    color: #4A5568;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .chart-ctrl-btn:hover {
+    background: #EBF5F5;
+    border-color: #CCE6E5;
+    color: #065956;
+  }
+  .chart-legend-cat {
+    align-items: center;
+  }
+  .chart-legend-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #4A5568;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.2rem;
+  }
+  .chart-legend-cat.overcrowded {
+    font-size: 0.72rem;
+    gap: 0.2rem 0.6rem;
+  }
+  .chart-legend-cat.overcrowded .chart-legend-swatch {
+    width: 8px;
+    height: 8px;
+  }
+  .chart-legend-hint {
+    flex-basis: 100%;
+    font-size: 0.7rem;
+    color: #A0AEC0;
+    font-style: italic;
+    margin-top: 0.2rem;
+  }
+  .chart-legend-dash {
+    vertical-align: middle;
   }
   .chart-title {
     font-size: 0.9rem;
@@ -577,5 +828,52 @@
   :global(.su-tooltip-value .su-tooltip-val) {
     font-weight: 700;
     font-size: 0.95rem;
+  }
+  /* B2: map loading overlay. Positioned over the Plot so the previous
+     rendering stays visible while a new fetch is in flight. */
+  .map-wrap {
+    position: relative;
+  }
+  .map-wrap-empty {
+    min-height: 400px;
+  }
+  .map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(1px);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .map-loading-overlay-empty {
+    background: transparent;
+    color: #6b7280;
+  }
+  .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid #CCE6E5;
+    border-top-color: #0B7A75;
+    border-radius: 50%;
+    animation: ambolt-spin 0.9s linear infinite;
+  }
+  .spinner-label {
+    font-size: 0.82rem;
+    color: #6b7280;
+  }
+  @keyframes ambolt-spin {
+    to { transform: rotate(360deg); }
+  }
+  /* B4: HTMLTooltip flip — when the cursor is in the right portion of
+     the viewport, translate the tooltip back so it opens to the left of
+     the cursor and never expands the viewport horizontally. SveltePlot
+     uses `.svelteplot-tooltip` for its HTMLTooltip wrapper. */
+  .ambolt-chart-output.tooltip-flip :global(.svelteplot-tooltip) {
+    transform: translateX(calc(-100% - 20px));
   }
 </style>

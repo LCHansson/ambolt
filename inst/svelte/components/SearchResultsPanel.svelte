@@ -9,6 +9,7 @@
   //   onBasket  — callback(item) when "Lägg i korg" is clicked
 
   import { basket } from './basketStore.svelte.js';
+  import KpiInfoModal from './KpiInfoModal.svelte';
 
   let {
     query = '',
@@ -22,6 +23,30 @@
   let totalCount = $state(0);
   let suggestLive = $state(false);
 
+  // Per-card "is the description truncated?" map keyed by item.value.
+  // Populated by the `measure` action after each card renders.
+  let truncated = $state({});
+  let infoOpenFor = $state(null);
+
+  // Svelte action: after mount, defer to rAF and compare scrollHeight to
+  // clientHeight. line-clamp truncates → scrollHeight grows past clientHeight.
+  function measure(node, key) {
+    const check = () => {
+      requestAnimationFrame(() => {
+        if (!node.isConnected) return;
+        const isTrunc = node.scrollHeight > node.clientHeight + 1;
+        if (truncated[key] !== isTrunc) {
+          truncated = { ...truncated, [key]: isTrunc };
+        }
+      });
+    };
+    check();
+    return {
+      update(newKey) { key = newKey; check(); },
+      destroy() {}
+    };
+  }
+
   // Client-side filters
   let sourceFilter = $state('all');
   let uniqueSources = $derived([...new Set(results.map(r => r.source))].sort());
@@ -32,16 +57,24 @@
     return r;
   });
 
-  // Group by source
-  let grouped = $derived.by(() => {
+  // Partition by freshness ("stale" = data not updated within ~last year,
+  // flagged server-side in /api/search). Stale hits move to a separate
+  // "Äldre tidsserier" section below the current results.
+  let currentItems = $derived(filtered.filter(r => r.freshness !== 'stale'));
+  let staleItems   = $derived(filtered.filter(r => r.freshness === 'stale'));
+
+  // Group by source within each partition
+  function groupBySource(items) {
     const groups = {};
-    for (const item of filtered) {
+    for (const item of items) {
       const src = item.source || 'Övrigt';
       if (!groups[src]) groups[src] = [];
       groups[src].push(item);
     }
     return Object.entries(groups);
-  });
+  }
+  let groupedCurrent = $derived(groupBySource(currentItems));
+  let groupedStale   = $derived(groupBySource(staleItems));
 
   // Fetch when query changes
   $effect(() => {
@@ -68,12 +101,30 @@
       .finally(() => { loading = false; });
   });
 
+  // Hint to the server that the user actively engaged with this entity
+  // — used by SU's background enrichment worker to prioritise its queue.
+  // Fire-and-forget; only relevant for sources that benefit from
+  // enrichment (currently pixieweb).
+  function pingEnrichPriority(item) {
+    if (item?.source_raw !== 'pixieweb' || !item?.entity_id) return;
+    const base = baseUrl || window.location.origin;
+    const url = new URL('/api/enrich_priority', base);
+    url.searchParams.set('entity_id', item.entity_id);
+    fetch(url.toString()).catch(() => {});
+  }
+
   function handleSelect(item) {
+    pingEnrichPriority(item);
     // Dispatch ambolt:select event for ServerSearchInput
     document.dispatchEvent(new CustomEvent('ambolt:select', {
       detail: { inputId: 'kpi_search', value: item.value, label: item.label }
     }));
     onSelect(item);
+  }
+
+  function handleBasket(item) {
+    pingEnrichPriority(item);
+    onBasket(item);
   }
 </script>
 
@@ -97,42 +148,70 @@
       {/if}
     </div>
 
-    {#each grouped as [source, items]}
+    {#snippet card(item)}
+      {@const eid = item.entity_id?.includes('\x1f') ? item.entity_id.replace('\x1f', ' / ') : item.entity_id}
+      <div class="srp-card">
+        <div class="srp-card-header">
+          <span class="srp-card-title" title={item.label}>{item.label}</span>
+          <span class="srp-card-source">{item.source}</span>
+        </div>
+        <div class="srp-card-subtitle">
+          {#if item.category}<span class="srp-card-category">{item.category}</span>{/if}
+          {#if eid}<span class="srp-card-id">{eid}</span>{/if}
+        </div>
+        {#if item.description}
+          <div class="srp-card-desc" use:measure={item.value}>{item.description}</div>
+        {/if}
+        {#if truncated[item.value] || item.has_extra_info}
+          <button type="button" class="srp-card-info"
+                  onclick={() => infoOpenFor = item.value}>
+            <i class="bi bi-info-circle"></i> Visa mer
+          </button>
+        {/if}
+        <div class="srp-card-actions">
+          <button class="srp-btn srp-btn-primary" onclick={() => handleSelect(item)}>
+            Visa direkt
+          </button>
+          {#if basket.has(item.value)}
+            <button class="srp-btn srp-btn-basket srp-in-basket" disabled>
+              I korg ✓
+            </button>
+          {:else}
+            <button class="srp-btn srp-btn-basket" onclick={() => handleBasket(item)}>
+              + Lägg i korg
+            </button>
+          {/if}
+        </div>
+      </div>
+    {/snippet}
+
+    {#each groupedCurrent as [source, items]}
       <div class="srp-group">
         <div class="srp-group-label">{source}</div>
-        {#each items as item}
-          {@const eid = item.entity_id?.includes('\x1f') ? item.entity_id.replace('\x1f', ' / ') : item.entity_id}
-          <div class="srp-card">
-            <div class="srp-card-header">
-              <span class="srp-card-title" title={item.label}>{item.label}</span>
-              <span class="srp-card-source">{item.source}</span>
-            </div>
-            <div class="srp-card-subtitle">
-              {#if item.category}<span class="srp-card-category">{item.category}</span>{/if}
-              {#if eid}<span class="srp-card-id">{eid}</span>{/if}
-            </div>
-            {#if item.description}
-              <div class="srp-card-desc">{item.description}</div>
-            {/if}
-            <div class="srp-card-actions">
-              <button class="srp-btn srp-btn-primary" onclick={() => handleSelect(item)}>
-                Visa direkt
-              </button>
-              {#if basket.has(item.value)}
-                <button class="srp-btn srp-btn-basket srp-in-basket" disabled>
-                  I korg ✓
-                </button>
-              {:else}
-                <button class="srp-btn srp-btn-basket" onclick={() => onBasket(item)}>
-                  + Lägg i korg
-                </button>
-              {/if}
-            </div>
+        {#each items as item}{@render card(item)}{/each}
+      </div>
+    {/each}
+
+    {#if staleItems.length > 0}
+      <div class="srp-stale-divider">
+        <h4 class="srp-stale-title">Äldre tidsserier</h4>
+        <p class="srp-stale-hint">Tidsserier som inte uppdaterats det senaste året</p>
+      </div>
+      <div class="srp-stale">
+        {#each groupedStale as [source, items]}
+          <div class="srp-group">
+            <div class="srp-group-label">{source}</div>
+            {#each items as item}{@render card(item)}{/each}
           </div>
         {/each}
       </div>
-    {/each}
+    {/if}
   </div>
+{/if}
+
+{#if infoOpenFor}
+  <KpiInfoModal value={infoOpenFor} {baseUrl}
+                onClose={() => infoOpenFor = null} />
 {/if}
 
 <style>
@@ -289,5 +368,39 @@
     text-align: center;
     color: #A0AEC0;
     font-style: italic;
+  }
+  .srp-stale-divider {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #E2E8F0;
+  }
+  .srp-stale-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #4A5568;
+    margin: 0 0 0.15rem 0;
+  }
+  .srp-stale-hint {
+    font-size: 0.75rem;
+    color: #A0AEC0;
+    font-style: italic;
+    margin: 0 0 0.6rem 0;
+  }
+  .srp-stale .srp-card {
+    opacity: 0.85;
+  }
+  .srp-card-info {
+    margin-top: 0.2rem;
+    font-size: 0.78rem;
+    color: #0B7A75;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.1rem 0;
+    font-family: inherit;
+  }
+  .srp-card-info:hover {
+    color: #065956;
+    text-decoration: underline;
   }
 </style>

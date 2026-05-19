@@ -573,7 +573,19 @@ create_app <- function(
   # @param dev Logical. If TRUE, starts Vite dev server with HMR instead of
   #   building static files. The user visits Vite's port (default 5173) and
   #   API requests are proxied to ambiorix. Default FALSE.
-  app_env$run <- function(dev = FALSE, rebuild = FALSE) {
+  app_env$run <- function(dev = FALSE, rebuild = FALSE, clean = FALSE) {
+    # `clean = TRUE` wipes the entire .ambolt_build/ (incl. node_modules)
+    # — use when dependencies or Vite cache may be corrupt. `rebuild = TRUE`
+    # is the lighter alternative that just regenerates and rebuilds.
+    if (isTRUE(clean)) {
+      build_base <- Sys.getenv("AMBOLT_BUILD_DIR", "")
+      if (build_base == "") build_base <- file.path(getwd(), ".ambolt_build")
+      if (dir.exists(build_base)) {
+        cat("clean=TRUE -- removing ", build_base, "\n", sep = "")
+        unlink(build_base, recursive = TRUE, force = TRUE)
+      }
+      rebuild <- TRUE  # clean implies rebuild
+    }
     app_env$.rebuild <- rebuild
     has_declarations <- length(app_env$.inputs) > 0 || length(app_env$.outputs) > 0
     has_pages <- !is.null(app_env$.pages)

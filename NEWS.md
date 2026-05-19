@@ -1,348 +1,378 @@
+# ambolt 0.1.0.9061
+
+* **ChartOutput map loading overlay.** Choropleth view shows a centered
+  spinner over the existing map while a new GeoJSON fetch + join is in
+  flight, instead of blanking the canvas. First paint (no previous map)
+  uses a full-area spinner. Diagnostic timing (`fetch ms / join ms /
+  features n`) logs to `console.debug`.
+* **ChartOutput tooltip viewport flip.** When the cursor is in the
+  right ~35 % of the viewport, the tooltip is translated to the left
+  of the cursor via CSS so it never forces a horizontal scrollbar.
+  Implemented as a `tooltip-flip` class toggled on the chart container
+  by a mousemove listener; SveltePlot's `.svelteplot-tooltip`
+  positioning is left intact, only translated.
+
+# ambolt 0.1.0.9060
+
+## ChartOutput: categorical legend + image download
+
+* Control row above the chart: legend visibility toggle, `PNG` download
+  (2× pixel density, computed CSS inlined for standalone rendering) and
+  `SVG` download (vector, same inlining). Filenames are
+  `<title-slug>_<YYYY-MM-DD>.<png|svg>`.
+* Categorical legend (line, dot, bar) reads `legend.items[]`
+  (color swatches + labels) and optional `legend.linetype_items[]`
+  (dash patterns) from the chart spec.
+* Overcrowded mode: when `legend.items.length > 10`, swatches and font
+  shrink and a hint suggests hovering over the chart for exact values.
+* `BarY` / `BarX` `fill` supports column-name accessors (parity with
+  `Line`'s `stroke`) so bars can be coloured per category from the spec.
+
+# ambolt 0.1.0.9058–9059
+
+## KpiInfoModal + extra-info surfacing
+
+* New `KpiInfoModal.svelte` — HTML5 `<dialog>` that lazy-fetches
+  `/api/kpi_info?value=<source>:<entity_id>` from the host app and
+  renders full metadata for a search hit (title, source badge, code,
+  category, description, plus per-source extras). The host app
+  implements the endpoint.
+* `SearchResultsPanel` measures whether each card's description is
+  visually truncated (`scrollHeight` vs `clientHeight` via a Svelte
+  action) and shows a "more info" affordance when needed. The
+  affordance also appears when the hit carries `has_extra_info: true`,
+  so cards with rich metadata but a short visible description still
+  expose it.
+* `KpiInfoModal` renders inline markdown-style links `[label](url)` as
+  `<a>` tags in description, contents, contact and notes fields. HTML
+  is escaped first to prevent injection from upstream metadata.
+
+# ambolt 0.1.0.9057
+
+## SearchResultsPanel: enrich-priority hint
+
+* Clicking an action on a search hit fires a fire-and-forget
+  `GET /api/enrich_priority?entity_id=<id>` so a host-app background
+  worker can lift that entity to the front of its work queue. No-op
+  when the host doesn't expose the endpoint; network errors silently
+  ignored. Only fires for sources the host opts in to via prop config.
+
+# ambolt 0.1.0.9054–9056
+
+## FilterRenderer: server-driven defaults + measure-axis awareness
+
+* `findTotalCode()` reads an optional `totalt_code` field directly off
+  the dim spec when the server provides it; falls back to a client-side
+  heuristic over recognised total-aggregate tokens (`T`, `t1`, `TOT`,
+  `0`, `00`, …) when absent.
+* `isAggregatedByDefault()` short-circuits to `false` when the dim spec
+  carries `is_measure_axis: true` — for "measure" dims where each value
+  is a distinct metric rather than an aggregation, the aggregate
+  hint stays hidden.
+
+## SearchResultsPanel: freshness partition
+
+* Hits with `freshness === "stale"` render under a separate heading
+  below the current results instead of mixed in. Card markup factored
+  into a `{#snippet card(item)}` and rendered twice with slightly
+  reduced opacity on stale cards.
+
+# ambolt 0.1.0.9048–9053
+
+## FilterRenderer: compatibility-based dim disabling
+
+* New optional `kpi_specs` field on the filter spec, each entry
+  `{ kpi_id, source, valid_combos: [[dim, ...], ...] }`. Dims not in
+  any valid combo containing the user's currently-narrowed selection
+  are greyed out (opacity 0.4 + `pointer-events: none`) with an
+  incompatibility tooltip.
+* Multi-KPI views are union-friendly: a dim is enabled if at least
+  one KPI in the selection considers it compatible. KPIs without
+  `valid_combos` count as "no constraint" so source-specific
+  restrictions don't bleed into other sources' filters.
+* Range dims (time sliders) and the implicit year axis are always
+  treated as enabled.
+* Falls back gracefully to the legacy single-KPI spec shape.
+* Bundled fixes (0.1.0.9051–9053): `{@const}` placement under the new
+  `.dim-row` wrapper, vertical-rhythm regression from the wrapper, and
+  a cross-KPI false-disable when an active dim doesn't exist in a
+  sibling KPI's universe.
+
+# ambolt 0.1.0.9050
+
+## app$run(clean = TRUE)
+
+* New `clean` argument on `app$run()`. Removes the entire
+  `.ambolt_build/` directory (including `node_modules` and the Vite
+  cache) before starting, forcing a fresh install and full rebuild.
+  Implies `rebuild = TRUE`. Use when dependencies or Vite's transform
+  cache are in an inconsistent state; for ambolt-version updates
+  `rebuild = TRUE` is still enough and faster.
+
+# ambolt 0.1.0.9049
+
+## Build: suppress css_unused_selector warnings
+
+* Generated `vite.config.js` installs an `onwarn` handler on the
+  Svelte plugin that filters `css_unused_selector` warnings, which
+  vite-plugin-svelte ≥ 5 treats as build errors. They are emitted for
+  CSS the static analyser cannot prove reachable (e.g. rules emitted
+  unconditionally by the codegen) and are lint noise, not actual
+  problems.
+
 # ambolt 0.1.0.9047
 
-## ChartOutput: surface empty-state title (2026-04-21)
+## ChartOutput: surface empty-state title
 
-* The empty branch (`chartData.length === 0`) now renders the chart
-  spec's `title` instead of a hardcoded "Ingen data". This lets the
-  host app pass an actionable hint via `chart_spec(title=...)` —
-  e.g. "Inga data från Trafikanalys — pröva att utelämna kortyp".
+* The empty branch (`chartData.length === 0`) renders the chart spec's
+  `title` instead of a hardcoded fallback, so the host app can pass an
+  actionable hint via `chart_spec(title = ...)`.
 
-# ambolt 0.1.0.9046
+# ambolt 0.1.0.9042–9046
 
-## Tooltip implicit-Totalt: handle multi-KPI nulls (2026-04-21)
+## ChartOutput tooltip overhaul
 
-* `implicitTotaltCols` now ignores null values when counting unique
-  values per column. Previously a multi-KPI overlay had two unique
-  values per column (the Totalt code from one KPI's rows, and `null`
-  from the other KPI's rows) and so no columns got hidden.
+* **Key–value grid layout.** The tooltip surfaces every meaningful
+  column on the hovered datum (grouping cols, filter dims, series),
+  with dedicated rows for the period (X) and the value (Y). Value row
+  is bolder and visually separated. Keys are humanised via a
+  `KEY_LABELS` table that host apps can extend.
+* **Period block.** Derived from `year` + `period_label` instead of
+  the chart's `xChannel`. Annual data renders just the year row;
+  sub-annual adds a period row. The interpolated end-of-period `date`
+  value (used only for sorting) is no longer surfaced.
+* **Dedup + label preference.** Time-equivalent columns are skipped
+  (the period row already covers them). When both `<dim>` and
+  `<dim>_text` / `<dim>_label` exist, the raw code is hidden in favour
+  of the human label.
+* **Implicit-total hiding.** Columns whose only non-null value across
+  the whole dataset is a recognised total-aggregate token are hidden
+  from the tooltip. Multi-KPI overlays ignore null values when counting
+  uniques so the dedup still triggers.
+* The composite `series` stroke key is suppressed; each grouping dim
+  already has its own row, so the composite is redundant.
 
-# ambolt 0.1.0.9045
+## Card / chip metadata polish
 
-## Tooltip: hide implicit-Totalt columns (2026-04-21)
-
-* New `implicitTotaltCols` derived in ChartOutput: a column is hidden
-  from the tooltip when (a) it has only one unique value across the
-  whole `chartData`, and (b) that value is a Totalt-like marker
-  (`Totalt`, `Alla`, `Samtliga`, `Båda könen`, `T`, `t1`, `TOT`, …).
-  An explicitly chosen single value (e.g. "Med last") still shows.
-
-# ambolt 0.1.0.9044
-
-## Tooltip period block + KPI label decoupling (2026-04-21)
-
-* Tooltip period rows are derived from `year` + `period_label` instead
-  of the chart's `xChannel`. The interpolated end-of-period `date` value
-  (used only for sorting) is no longer surfaced to the user. Annual data
-  → just "År:". Sub-annual → "År:" + "Period:".
-* `series` (composite stroke key like "Invånare · Män") is suppressed
-  from the tooltip in favour of a separate `kpi_label` column the host
-  app sets. Each grouping dimension already shows on its own row, so
-  the composite is redundant.
-* KEY_LABELS extended with Swedish names for SCB pixieweb dims (Kon →
-  Kön, ContentsCode → Innehåll, Sektor, Region, UtbMYH).
-
-# ambolt 0.1.0.9043
-
-## Tooltip dedup + label preference (2026-04-21)
-
-* `tooltipRows()` now skips time-equivalent columns (year, period_label,
-  Tid, time, ar, manad, kvartal) — the explicit period row at the
-  bottom already conveys this, so the previous duplication ("Period"
-  AND "Tid" with identical values) is gone.
-* When both `<dim>` and `<dim>_text` (or `<dim>_label`) exist on the
-  datum, the raw code is hidden in favour of the human label. E.g.
-  `Kon = "1"` is suppressed when `Kon_text = "Män"` is present.
-
-# ambolt 0.1.0.9042
-
-## Richer chart tooltip + KPI metadata polish (2026-04-20)
-
-* **ChartOutput.svelte:** tooltip is now a key-value grid that surfaces
-  every meaningful column on the hovered datum (KPI grouping cols,
-  filter dimensions, series), with dedicated rows for the period (X)
-  and the value (Y). Value row is bolder and visually separated. Keys
-  are humanised via a `KEY_LABELS` table (year→År, gender→Kön etc.).
-* **BasketPanel.svelte:** basket cards show source + entity ID under
-  the title (small mono-spaced, light grey). Title gets a `title`
-  attribute for hover-tooltip on truncated long names.
-* **SearchResultsPanel.svelte:** card subtitle re-organised — category
-  and entity ID now render as siblings on a separate line, with the ID
-  in mono-spaced light grey. Title gets full-name hover.
-* **MultiViewPanel.svelte:** KPI chips show `source · entity_id` under
-  the label and full `label (source · id)` as the chip's `title`.
+* `BasketPanel`, `SearchResultsPanel` and `MultiViewPanel` show
+  `source` + `entity_id` under each title/label (small mono-spaced)
+  and add `title` attributes for full-name hover on truncated text.
 
 # ambolt 0.1.0.9041
 
-## VizTypeSelector polish (2026-04-20)
+## VizTypeSelector polish
 
-* Tightened button padding (`0.25rem 0.5rem`) and font-size (`0.78rem`)
-  for a more compact icon-row footprint.
-* Inactive buttons now hide the verbal label — only the icon shows.
-  The active button still displays both icon and label, and the
-  `title` attribute on inactive buttons preserves accessible naming.
-* Wrap margin: `0 0 0.4rem 0` so the selector sits cleanly *above*
-  the chart it controls (previously had `margin-top: -0.5rem` to
-  anchor below).
+* Tighter button padding and font-size. Inactive buttons hide the
+  verbal label (icon only); active button retains both. `title`
+  attribute on inactive buttons preserves accessible naming. Wrap
+  margin adjusted so the selector sits above the chart it controls.
 
 # ambolt 0.1.0.9040
 
-## MultiViewPanel: gate empty-state placeholder on basket count (2026-04-20)
+## MultiViewPanel: empty-state gating
 
-* The "Lägg till nyckeltal i korgen..." placeholder now only renders when
-  the basket has items but no views yet. In pure single-view mode
-  (basket empty) the component produces no output, leaving the host
-  layout's own single-view chart uncluttered.
+* The empty-state placeholder only renders when the basket has items
+  but no views yet. In pure single-view mode (basket empty) the
+  component produces no output, leaving the host layout's own
+  single-view chart uncluttered.
 
 # ambolt 0.1.0.9039
 
-## FilterRenderer: empty-filter Totalt hint (2026-04-20)
+## FilterRenderer: empty-filter total hint
 
-* Multi-select dims no longer pre-fill with a Totalt code on initial
-  render — they start empty so the user sees a clean "no choice" state.
-* When an empty filter resolves to Totalt downstream (the dim has a real
-  Totalt code like `t1`/`T`/`TOT` or label `Totalt`/`Alla`), the renderer
-  shows a discreet "Visar totalvärden" hint below the input.
-* Geographic block shows "Visar Riket" hint when no kommun/region is
-  picked — mirrors the Totalt convention.
-* `findTotalCode()` now returns `null` instead of falling back to the
-  first value, so `isAggregatedByDefault()` can distinguish real Totalt
-  dims from arbitrary categorical dims.
+* Multi-select dims start empty on initial render instead of
+  pre-filling with a total-aggregate code.
+* When an empty filter resolves to a total downstream (the dim has a
+  recognised total code or matching label), the renderer shows a
+  discreet hint below the input.
+* `findTotalCode()` returns `null` instead of falling back to the
+  first value, so `isAggregatedByDefault()` can distinguish real
+  total-aggregate dims from arbitrary categorical dims.
 
 # ambolt 0.1.0.9038
 
-## Basket system: store + panel + codegen (2026-04-17)
+## Basket system + new inputs + chart enhancements
 
-* New `basketStore.svelte.js` — singleton Svelte 5 store for collecting
-  data series across searches. Follows the `modalStore` pattern.
-  API: `basket.add(item)`, `basket.remove(value)`, `basket.clear()`,
-  `basket.toggle()`, `basket.has(value)`, reactive `basket.items`/`basket.count`.
-* New `BasketPanel.svelte` — fixed-position panel at the bottom of the
-  viewport. Shows mini-cards for collected series, collapsible, with
-  "Utforska data" button to enter exploration mode.
-* Codegen auto-appends `<BasketPanel />` when the app registers a
-  `search_results_panel` input (basket-enabled apps).
+* New `basketStore.svelte.js` — singleton Svelte 5 store for
+  collecting data series across searches, following the `modalStore`
+  pattern. API: `basket.add(item)`, `basket.remove(value)`,
+  `basket.clear()`, `basket.toggle()`, `basket.has(value)`, reactive
+  `basket.items` / `basket.count`.
+* New `BasketPanel.svelte` — fixed-position panel at the bottom of
+  the viewport. Shows mini-cards for collected series, is
+  collapsible, and exposes an action button to enter exploration
+  mode. Codegen auto-appends it when a `search_results_panel` input
+  is registered.
+* New input `search_results_panel` — data-driven component that
+  replaces R-rendered HTML search results. Fetches from `/api/search`
+  with a reactive `query` prop, groups results by source with a
+  visual separator, exposes source filter buttons, shows a category
+  metadata line, and pairs each card with dual action buttons
+  (open / add-to-basket) plus an added-state for items already in
+  the basket. Codegen treats it as display-only.
+* New input `viz_type_selector` — horizontal icon button group for
+  visualization type selection (Bootstrap Icons:
+  `bi-graph-up`, `bi-bar-chart-fill`, `bi-geo-alt-fill`). Per-button
+  `disabled` state for data-dependent availability.
+* `FilterRenderer` now prefers total-aggregate codes (`T`, `t1`,
+  `TOT`) and labels as defaults instead of always picking the first
+  value.
+* New `app$init_script(js)` — injects custom JavaScript into
+  `main.js` that runs after the Svelte app mounts. Useful for
+  URL-based state initialisation, analytics and debug tooling.
 
-## SearchResultsPanel component (2026-04-17)
+## ChartOutput: grid mode, legend, correct projection
 
-* New input type `search_results_panel` — data-driven Svelte component
-  that replaces R-rendered HTML search results. Features:
-  - Fetches from `/api/search` endpoint with reactive `query` prop
-  - Groups results by source with visual separator
-  - Source filter buttons (Alla / KOLADA / SCB / TRAFA)
-  - Category metadata line (operating_area / subject_path / product)
-  - Dual action buttons: "Visa direkt" + "+ Lägg i korg"
-  - "I korg ✓" state for already-added items
-* New codegen support: `search_results_panel` input type generates
-  no `$state` variable (display-only) and passes `query` prop.
-
-## VizTypeSelector component (2026-04-17)
-
-* New input type `viz_type_selector` — horizontal icon button group for
-  visualization type selection. Uses Bootstrap Icons (`bi-graph-up`,
-  `bi-bar-chart-fill`, `bi-geo-alt-fill`). Supports per-button `disabled`
-  state for data-dependent availability.
-
-## FilterRenderer: smart defaults (2026-04-17)
-
-* `FilterRenderer` now prefers "total" codes (`T`, `t1`, `TOT`) and labels
-  (`Totalt`, `Alla`, `Samtliga`) as defaults, instead of always picking the
-  first value.
-
-## app$init_script() (2026-04-17)
-
-* New `app$init_script(js)` method — injects custom JavaScript into
-  `main.js` that runs after the Svelte app mounts. Useful for URL-based
-  state initialization, analytics, and debug tooling.
-
-## ChartOutput: grid mode + legend (2026-04-17)
-
-* ChartOutput supports `grid` array in chart_spec — renders multiple
-  sub-charts as small multiples in a CSS grid layout.
-* ChartOutput supports `legend` in chart_spec — renders color swatches
-  with labels below the chart (used for choropleth maps).
-* Map projection changed from `geoMercator` (string, broken) to
-  `geoConicEqualArea` (function) for correct rendering with proper
-  area preservation. Documented in svelteplot_notes.md #10-11.
+* `chart_spec.grid` array renders multiple sub-charts as small
+  multiples in a CSS grid layout.
+* `chart_spec.legend` renders color swatches with labels below the
+  chart (used for choropleth maps).
+* Map projection switched from `geoMercator` (string, broken) to
+  `geoConicEqualArea` (function) for correct area-preserving
+  rendering.
 
 # ambolt 0.1.0.9036
 
-## page_content as top-level layout (2026-04-18)
+## page_content as top-level layout
 
-* `app$ui()` now accepts `page_content()` as the top-level layout node,
-  in addition to the existing `sidebar_layout()`. This enables fluid
-  full-width layouts analogous to Shiny's `fluidPage()`.
-* `sidebar_layout()` can be nested inside `page_content()` (or any other
-  container node). The codegen emits the same `.sidebar-layout` /
-  `.sidebar` / `.content` CSS classes so nested sidebars get framework
-  styling automatically.
-* Example:
-  ```r
-  app$ui(page_content(
-    section("Search", "query"),
-    sidebar_layout(
-      sidebar = sidebar(section("Filters", "filters")),
-      main = main("chart", "commentary")
-    )
-  ))
-  ```
+* `app$ui()` accepts `page_content()` as the top-level layout node,
+  in addition to `sidebar_layout()`, enabling fluid full-width
+  layouts analogous to Shiny's `fluidPage()`. `sidebar_layout()` can
+  be nested inside `page_content()` (or any other container); the
+  codegen emits the same `.sidebar-layout` / `.sidebar` / `.content`
+  classes so nested sidebars get framework styling automatically.
 
-## ChartOutput: Geo mark fixes (2026-04-18)
+## ChartOutput: Geo mark fixes
 
-* Fixed data join bug in map/choropleth rendering: the join key now
-  correctly uses `geoMark.id_field` (from `mark_geo(id_field = ...)`)
-  instead of the non-existent `geoMark.fill_key` property.
-* Map borders now use the R-specified `stroke`/`strokeWidth` from the
+* Map/choropleth data join now uses `geoMark.id_field` (from
+  `mark_geo(id_field = ...)`) instead of the non-existent
+  `geoMark.fill_key` property.
+* Map borders use the R-specified `stroke` / `strokeWidth` from the
   mark spec, with darker defaults (#333 @ 0.8px vs #666 @ 0.5px).
 
 # ambolt 0.1.0.9034
 
-## server_search: live-search fallback ("nödutgång") (2026-04-15)
+## ServerSearchInput: live-search fallback
 
-* `ServerSearchInput` gains two optional props:
-  * `liveEndpoint` — URL of a per-source live-search endpoint that accepts
-    `?source=<id>&q=<query>` and returns the same shape as the main search
-    endpoint.
-  * `liveSources` — array of `{id, label}` objects describing the sources
-    to offer buttons for.
-  When either the main endpoint reports `suggest_live: true` or the local
-  result list is empty, a small panel at the bottom of the dropdown offers
-  one button per live source. Clicking a button fetches from `liveEndpoint`
-  and merges the returned rows into the dropdown.
-* The main endpoint response may now be an object with `results` +
-  meta-fields (`status`, `count`, `suggest_live`, `query`). Callers that
-  still return a bare JSON array continue to work unchanged.
-* New codegen wiring: `app$input("x", type = "server_search",
-  live_endpoint = "/api/search/live", live_sources = list(list(id = "scb",
-  label = "SCB"), ...))` is translated into the corresponding
-  `liveEndpoint`/`liveSources` Svelte props.
+* `ServerSearchInput` gains two optional props: `liveEndpoint` (URL
+  of a per-source live-search endpoint that accepts
+  `?source=<id>&q=<query>` and returns the main endpoint's shape) and
+  `liveSources` (array of `{id, label}` objects describing the
+  sources to offer buttons for). When either the main endpoint
+  reports `suggest_live: true` or the local result list is empty, a
+  small panel at the bottom of the dropdown offers one button per
+  live source. Clicking fetches from `liveEndpoint` and merges rows
+  into the dropdown.
+* The main endpoint response may be an object with `results` plus
+  meta-fields (`status`, `count`, `suggest_live`, `query`); callers
+  returning a bare JSON array continue to work unchanged.
+* Codegen wiring:
+  `app$input("x", type = "server_search", live_endpoint = ...,
+  live_sources = list(list(id = "...", label = "..."), ...))`
+  translates to the corresponding Svelte props.
 
 # ambolt 0.1.0
 
-Initial release. A web application framework for R developers, powered by
-Svelte 5 and ambiorix.
+Initial release. A web application framework for R developers,
+powered by Svelte 5 and ambiorix.
 
-## DynamicFilters input type (2026-04-15)
+## Inputs
 
-- New input type: `dynamic_filters` — smart filter component that watches
-  another input's value and refetches a `filter_spec` from a server endpoint.
-  Renders adaptive controls via FilterRenderer; values are exposed as a
-  JSON string for ambolt's `depends_on` mechanism.
-- Bound value is a JSON string like `'{"year":[2010,2024],"gender":"T"}'`.
-- Outputs read filter values via `jsonlite::fromJSON(params$filters)`.
-- Props: `spec_endpoint`, `trigger` (other input id), `trigger_param_name`,
+* **dynamic_filters** — filter component that watches another input
+  and refetches a `filter_spec` from a server endpoint. Renders
+  adaptive controls via `FilterRenderer`; the bound value is a JSON
+  string consumable in R via `jsonlite::fromJSON(params$filters)`.
+  Props: `spec_endpoint`, `trigger`, `trigger_param_name`,
   `year_min`, `year_max`.
-- Files: `DynamicFilters.svelte`, `utils.R`, `codegen_markup.R`, `codegen_script.R`.
+* **range_slider** — two-handle numeric range slider. Bound value is
+  a `[from, to]` array. Designed for time periods but works for any
+  numeric range.
+* **multi_select** — multi-select dropdown with searchable options.
+  Bound value is an array of selected codes. Choices use
+  `{code, text}`.
+* **server_search** — server-backed typeahead with configurable
+  debounce. Dropdown shows label, description snippet and source
+  badge per result. Keyboard navigation (arrow keys, enter, escape)
+  and clear button. Props: `endpoint`, `placeholder`, `debounce`,
+  `baseUrl`, `valueField`.
+* **FilterRenderer.svelte** — utility component that renders dynamic
+  filter controls from a `filter_spec` object. Groups dimensions
+  into time / geography / other blocks. Embedded by the
+  dynamic-filters wiring.
 
-## Adaptive filter components (2026-04-15)
+## Outputs
 
-- New input type: `range_slider` — two-handle numeric range slider via
-  `RangeSlider.svelte`. Bound value is a `[from, to]` array. Designed for
-  time periods but works for any numeric range.
-- New input type: `multi_select` — multi-select dropdown with searchable
-  options via `MultiSelect.svelte`. Bound value is an array of selected
-  codes. Choices use `{code, text}` format (vs the existing `select`'s
-  `{value, label}`).
-- New utility component: `FilterRenderer.svelte` — renders dynamic filter
-  controls from a `filter_spec` object. Groups dimensions into three
-  blocks (Tidsperiod / Geografi / Övriga) per the SU wireframe design.
-  Not yet a registered output type — meant to be embedded by app authors
-  in fas 4.3.
-- Files: `RangeSlider.svelte`, `MultiSelect.svelte`, `FilterRenderer.svelte`,
-  `utils.R`, `codegen_markup.R`, `codegen_script.R`, `index.js`.
-
-## ChartOutput tooltips + locale (2026-04-15)
-
-- `ChartOutput.svelte` now renders an `HTMLTooltip` over the chart that
-  snaps to the nearest data point on hover. Shows formatted x and y
-  values from the primary positional mark (line/dot/bar).
-- Locale defaults to `sv-SE` with explicit decimal `tickFormat` on x and y
-  axes. Suppresses SveltePlot's auto-compact notation (which would
-  otherwise render 1200 as "1.2k" / "1,2 tn").
-- x-axis: no grouping (years like 2023 stay unformatted).
-- y-axis: grouping ON (1200 → "1 200" with svensk space separator).
-- R can override locale and numberFormat via `chart_spec(locale=, number_format=)`.
-
-## ChartOutput / SveltePlot integration (2026-04-14)
-
-- New output type: `chart` — interactive charts rendered via SveltePlot.
-  R returns a JSON spec (data + marks + scales); the frontend renders it
+* **chart** — interactive charts rendered via SveltePlot. R returns a
+  JSON spec (data + marks + scales); the frontend renders it
   natively using SveltePlot's grammar-of-graphics components.
-- Supported marks: `line`, `dot`, `bar`, `ruleX`, `ruleY`. Extensible.
-- `svelteplot` (^0.14.0) added as npm dependency in generated package.json.
-- Vite alias for `svelteplot` added to generated `vite.config.js` so
-  imports from components living outside the build dir can resolve.
-- Each mark receives `data` explicitly (SveltePlot marks don't inherit
-  from `<Plot>` — default is empty array).
-- Registered via `app$output(id, type = "chart", render = function(params) { ... })`.
-- Files: `ChartOutput.svelte`, `utils.R`, `build.R`.
+  Supported marks: `line`, `dot`, `bar`, `geo`, `ruleX`, `ruleY`.
+  `svelteplot` (^0.14.0) added as an npm dependency in the generated
+  `package.json`; a Vite alias for `svelteplot` is added to the
+  generated `vite.config.js`.
+* ChartOutput renders an `HTMLTooltip` that snaps to the nearest data
+  point on hover, with formatted X and Y values. Default locale is
+  configurable via `chart_spec(locale = ..., number_format = ...)`;
+  explicit `tickFormat` on x and y axes suppresses SveltePlot's
+  auto-compact notation.
 
-## ServerSearchInput (2026-04-13)
+## Runtime modal rendering
 
-- New input type: `server_search` — server-backed typeahead search.
-  Unlike `SearchSelect` (which filters a client-side choices array), this
-  component fetches suggestions from an API endpoint with configurable debounce.
-- Props: `endpoint`, `placeholder`, `debounce` (ms), `baseUrl`, `valueField`.
-- Dropdown shows label, description snippet, and source badge per result.
-- Keyboard navigation (arrow keys, enter, escape) and clear button.
-- Registered via `app$input(id, type = "server_search", endpoint = "/api/search")`.
-- Files: `ServerSearchInput.svelte`, `utils.R`, `codegen_markup.R`, `codegen_script.R`.
-
-## Runtime modal rendering (2026-04-11)
-
-- Modals now use the same composable layout functions as pages
-  (`page_content()`, `section()`, `view_switcher()`, etc.) via a runtime
-  renderer (`RenderNode.svelte`).
-- New response shape: `list(title, content = page_content(...))` alongside
-  the existing `list(title, html)` and `list(title, fields)` forms.
-- New constructor: `data_table()` for tables with inline endpoint config.
-- All production app modals (~15 HTML-shaped) ported to the new content path.
-- Legacy `entry.tabs` branch removed from Modal.svelte.
-- `.drop_nulls()` applied to all layout constructors to prevent
-  NULL-serialization issues on the frontend.
-
-## Package infrastructure (2026-04-12)
-
-- R CMD check passes with 0 errors
-- 73 testthat assertions across auth, layout, and HTML helpers
-- Auto-generated NAMESPACE via roxygen2
-- 27 man pages with `@param`, `@return`, and `@examples`
-- MIT LICENSE file
-- Demo apps use `library(ambolt)` with `source()` fallback
-- Getting-started and multi-page-with-auth vignettes
+* Modals use the same composable layout functions as pages
+  (`page_content()`, `section()`, `view_switcher()`, …) via a runtime
+  renderer (`RenderNode.svelte`). New response shape:
+  `list(title, content = page_content(...))` alongside the existing
+  `list(title, html)` and `list(title, fields)` forms. New
+  constructor: `data_table()` for tables with inline endpoint
+  config.
 
 ## Core API
 
-- `create_app()` — application constructor with module system, auth, themes
-- Layout DSL: `page_content()`, `page_header()`, `view_switcher()`, `section()`,
-  `columns()`, `details()`, `sidebar_layout()`
-- HTML helpers: `action_button()`, `modal_link()`, `badge()`, `detail_row()`,
-  `detail_grid()`, `action_bar()`, `html_escape()`
+* `create_app()` — application constructor with module system, auth
+  and themes.
+* Layout DSL: `page_content()`, `page_header()`, `view_switcher()`,
+  `section()`, `columns()`, `details()`, `sidebar_layout()`.
+* HTML helpers: `action_button()`, `modal_link()`, `badge()`,
+  `detail_row()`, `detail_grid()`, `action_bar()`, `html_escape()`.
 
 ## Components
 
-- **DataTable** — sortable, searchable, paginated tables with inline editing
-- **CardGrid** — filterable card layout with search, favorites, rich fields
-- **StatCards** — key metrics display
-- **ViewSwitcher** — toggle between multiple views of the same data
-- **Modal** — stacked modals with back navigation, tabs, forms
-- **FormBody** — auto-generated forms with validation
-- **NavSidebar** — collapsible navigation with page routing
-- **AuthGuard** — login/session management with argon2id passwords
-- **Toast** — notification system
+* **DataTable** — sortable, searchable, paginated tables with inline
+  editing.
+* **CardGrid** — filterable card layout with search, favorites,
+  rich fields.
+* **StatCards** — key metrics display.
+* **ViewSwitcher** — toggle between multiple views of the same data.
+* **Modal** — stacked modals with back navigation, tabs, forms.
+* **FormBody** — auto-generated forms with validation.
+* **NavSidebar** — collapsible navigation with page routing.
+* **AuthGuard** — login / session management with argon2id passwords.
+* **Toast** — notification system.
 
-## Theme System (3-tier)
+## Theme system (3-tier)
 
-1. **Theme tokens** (`app$theme()`) — global CSS variables for colors, fonts,
-   radius, and component-level overrides (nav, table, badge, button, card, modal)
-2. **Semantic props** — per-instance control via `gap`, `compact`, `variant`, `icon`
-3. **Escape hatch** — every DSL function accepts `class` and `style` parameters
+1. **Theme tokens** (`app$theme()`) — global CSS variables for
+   colors, fonts, radius and component-level overrides (nav, table,
+   badge, button, card, modal).
+2. **Semantic props** — per-instance control via `gap`, `compact`,
+   `variant`, `icon`.
+3. **Escape hatch** — every DSL function accepts `class` and `style`
+   parameters.
 
-## Declarative Action System
+## Declarative action system
 
-Server-rendered HTML uses `data-ambolt-*` attributes for fetch actions.
-No inline JavaScript needed — `action_button()` generates pure HTML.
+* Server-rendered HTML uses `data-ambolt-*` attributes for fetch
+  actions. No inline JavaScript needed — `action_button()` generates
+  pure HTML.
 
-## Page Lifecycle
+## Page lifecycle
 
-`ambolt:page-enter` / `ambolt:page-exit` events for multi-page apps.
-HtmlOutput supports `refreshEvent` for event-driven re-fetching.
+* `ambolt:page-enter` / `ambolt:page-exit` events for multi-page
+  apps. `HtmlOutput` supports `refreshEvent` for event-driven
+  re-fetching.
+
+## Package infrastructure
+
+* R CMD check passes with 0 errors; testthat assertions across auth,
+  layout and HTML helpers; auto-generated NAMESPACE via roxygen2;
+  man pages with `@param` / `@return` / `@examples`; MIT LICENSE;
+  getting-started and multi-page-with-auth vignettes.
