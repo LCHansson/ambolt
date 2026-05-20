@@ -177,13 +177,32 @@
   let geoDataReady = $derived(geoEndpoint !== '' && chartData.length > 0);
 
   // Tracks whether the GeoJSON fetch + join is in flight so the map view
-  // can show a loading overlay (B2). Reset on every geo effect re-run.
+  // can show a loading overlay. Retained as state across renders so the
+  // outer template can read it.
   let geoJoining = $state(false);
+  // Last-seen geoEndpoint — used to detect KPI/level changes vs. mere
+  // filter changes. When the endpoint changes we clear stale features
+  // (they belong to a different geography). When it stays the same we
+  // keep them visible until the new ones land — this lets the loading
+  // overlay sit on top of the previous map instead of blanking the
+  // canvas during the R server fetch.
+  let prevGeoEndpoint = $state('');
 
   $effect(() => {
-    if (!geoDataReady) { geoFeatures = []; geoJoining = false; return; }
-    const ep = geoEndpoint;  // track it
-    const data = chartData;   // track it
+    const ep = geoEndpoint;   // track
+    const data = chartData;   // track
+    if (ep !== prevGeoEndpoint) {
+      // New KPI / different geo level → wipe stale features.
+      geoFeatures = [];
+      prevGeoEndpoint = ep;
+    }
+    if (!geoDataReady) {
+      // chartData is empty (e.g. mid-fetch, or empty-state). Don't
+      // clear geoFeatures — keep the previous map visible until a new
+      // fetch lands. fetch_state.loading drives the overlay separately.
+      geoJoining = false;
+      return;
+    }
     geoJoining = true;
     const t0 = performance.now();
     // Geo effect: fetch GeoJSON and join KPI data
@@ -399,7 +418,7 @@
      onmousemove={onMouseMove}
      role="presentation"
      bind:this={chartContainer}>
-  {#if !fetch_state.error && !fetch_state.loading && (chartData.length > 0 || isGrid || geoFeatures.length > 0)}
+  {#if !fetch_state.error && (chartData.length > 0 || isGrid || geoFeatures.length > 0)}
     <div class="chart-controls">
       {#if hasLegend}
         <button type="button" class="chart-ctrl-btn"
@@ -422,6 +441,58 @@
   {/if}
   {#if fetch_state.error}
     <p class="error">Chart error: {fetch_state.error}</p>
+  {:else if isMap && geoFeatures.length > 0}
+    <!-- MAP MODE: choropleth via Geo mark. Render even while
+         fetch_state.loading is true so the user sees the previous map
+         under the loading overlay during filter changes. -->
+    {#if title}
+      <div class="chart-title">{title}</div>
+    {/if}
+    <div class="map-wrap">
+      <Plot
+        projection={{ type: geoConicEqualArea, domain: { type: 'FeatureCollection', features: geoFeatures } }}
+        height={600}
+        marginLeft={0}
+        marginRight={0}
+      >
+        <Geo
+          data={geoFeatures}
+          fill={(d) => d.properties._fill}
+          stroke={geoMark.stroke ?? '#333'}
+          strokeWidth={geoMark.strokeWidth ?? 0.8}
+          title={(d) => `${d.properties._name}: ${d.properties._value != null ? new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 1}).format(d.properties._value) : 'Ingen data'}`}
+        />
+      </Plot>
+      {#if fetch_state.busy || geoJoining}
+        <div class="map-loading-overlay" aria-live="polite">
+          <div class="spinner" aria-label="Uppdaterar karta..."></div>
+        </div>
+      {/if}
+    </div>
+    {#if legend?.items}
+      <div class="chart-legend">
+        {#each legend.items as item}
+          <span class="chart-legend-item">
+            <span class="chart-legend-swatch" style="background:{item.color}"></span>
+            {item.label}
+          </span>
+        {/each}
+        {#if legend.na_color}
+          <span class="chart-legend-item">
+            <span class="chart-legend-swatch" style="background:{legend.na_color}"></span>
+            Ingen data
+          </span>
+        {/if}
+      </div>
+    {/if}
+  {:else if isMap}
+    <!-- Map first paint (no previous features yet): full-area spinner. -->
+    <div class="map-wrap map-wrap-empty">
+      <div class="map-loading-overlay map-loading-overlay-empty">
+        <div class="spinner" aria-label="Laddar karta..."></div>
+        <div class="spinner-label">Laddar karta…</div>
+      </div>
+    </div>
   {:else if fetch_state.loading}
     <div class="loading">Loading chart...</div>
   {:else if isGrid}
@@ -467,55 +538,6 @@
     </div>
   {:else if chartData.length === 0 && !isMap}
     <div class="empty">{title || 'Ingen data'}</div>
-  {:else if isMap && geoFeatures.length > 0}
-    <!-- MAP MODE: choropleth via Geo mark -->
-    {#if title}
-      <div class="chart-title">{title}</div>
-    {/if}
-    <div class="map-wrap">
-      <Plot
-        projection={{ type: geoConicEqualArea, domain: { type: 'FeatureCollection', features: geoFeatures } }}
-        height={600}
-        marginLeft={0}
-        marginRight={0}
-      >
-        <Geo
-          data={geoFeatures}
-          fill={(d) => d.properties._fill}
-          stroke={geoMark.stroke ?? '#333'}
-          strokeWidth={geoMark.strokeWidth ?? 0.8}
-          title={(d) => `${d.properties._name}: ${d.properties._value != null ? new Intl.NumberFormat('sv-SE', {maximumFractionDigits: 1}).format(d.properties._value) : 'Ingen data'}`}
-        />
-      </Plot>
-      {#if geoJoining}
-        <div class="map-loading-overlay" aria-live="polite">
-          <div class="spinner" aria-label="Uppdaterar karta..."></div>
-        </div>
-      {/if}
-    </div>
-    {#if legend?.items}
-      <div class="chart-legend">
-        {#each legend.items as item}
-          <span class="chart-legend-item">
-            <span class="chart-legend-swatch" style="background:{item.color}"></span>
-            {item.label}
-          </span>
-        {/each}
-        {#if legend.na_color}
-          <span class="chart-legend-item">
-            <span class="chart-legend-swatch" style="background:{legend.na_color}"></span>
-            Ingen data
-          </span>
-        {/if}
-      </div>
-    {/if}
-  {:else if isMap}
-    <div class="map-wrap map-wrap-empty">
-      <div class="map-loading-overlay map-loading-overlay-empty">
-        <div class="spinner" aria-label="Laddar karta..."></div>
-        <div class="spinner-label">Laddar karta…</div>
-      </div>
-    </div>
   {:else}
     {#if title}
       <div class="chart-title">{title}</div>
@@ -536,63 +558,148 @@
     >
       {#each marks as mark}
         {#if mark.type === 'line'}
-          <!-- Line rendering with two independent visual channels:
-               - stroke = column name (color, via SveltePlot's stroke channel)
-               - linetype = column name (dash, emulated via multiple <Line>
-                 components — one per unique linetype value, each with its
-                 own constant strokeDasharray).
-               Without a linetype column, render a single <Line> with
-               stroke as either field accessor (column) or constant. -->
+          <!-- Line rendering as a cross-product split on (stroke value,
+               linetype value). SveltePlot's <Line> does NOT auto-split
+               series when stroke is an accessor returning categorical
+               strings — it draws a single path that connects all points
+               with per-point coloring, creating visible "bind" lines
+               between distinct categories. We therefore emit one <Line>
+               per (stroke, linetype) pair with a constant stroke color
+               and dash pattern; each Line's data is the matching subset.
+               Color resolution: spec.legend.items[label].color when
+               available (single source of truth shared with the legend
+               swatch), falling back to scales.color.range by index. -->
           {@const isFieldStroke = typeof mark.stroke === 'string' &&
                                   !mark.stroke.startsWith('#')}
-          {#if mark.linetype && typeof mark.linetype === 'string'}
-            {@const dashPalette = [undefined, '6,3', '2,2', '6,3,2,3',
-                                   '10,4', '4,2,2,2']}
-            {@const linetypeValues =
-              [...new Set(chartData.map(d => d[mark.linetype]))]}
-            {#each linetypeValues as ltVal, i}
-              {@const subset = chartData.filter(d => d[mark.linetype] === ltVal)}
-              <Line
-                data={subset}
-                x={mark.x}
-                y={mark.y}
-                stroke={isFieldStroke ? (d) => d[mark.stroke] : mark.stroke}
-                strokeDasharray={dashPalette[i % dashPalette.length]}
-                strokeWidth={mark.strokeWidth ?? 2}
-              />
+          {@const hasStroke = isFieldStroke}
+          {@const hasLinetype = !!mark.linetype &&
+                                typeof mark.linetype === 'string'}
+          {@const dashPalette = [undefined, '6,3', '2,2', '6,3,2,3',
+                                 '10,4', '4,2,2,2']}
+          {@const strokeValues = hasStroke
+            ? [...new Set(chartData.map(d => d[mark.stroke]))]
+                .filter(v => v != null)
+            : [null]}
+          {@const linetypeValues = hasLinetype
+            ? [...new Set(chartData.map(d => d[mark.linetype]))]
+                .filter(v => v != null)
+            : [null]}
+          {@const colorFor = (val) => {
+            if (val == null) return mark.stroke ?? '#0B7A75';
+            if (legend?.items) {
+              const hit = legend.items.find(it => it.label === String(val));
+              if (hit) return hit.color;
+            }
+            const idx = strokeValues.indexOf(val);
+            return scales.color?.range?.[idx] ?? '#0B7A75';
+          }}
+          {#each strokeValues as sVal}
+            {#each linetypeValues as ltVal, li}
+              {@const subset = chartData.filter(d =>
+                (!hasStroke || d[mark.stroke] === sVal)
+                && (!hasLinetype || d[mark.linetype] === ltVal))}
+              {#if subset.length > 0}
+                <Line
+                  data={subset}
+                  x={mark.x}
+                  y={mark.y}
+                  stroke={hasStroke ? colorFor(sVal) : (mark.stroke ?? '#0B7A75')}
+                  strokeDasharray={hasLinetype ? dashPalette[li % dashPalette.length] : undefined}
+                  strokeWidth={mark.strokeWidth ?? 2}
+                />
+              {/if}
+            {/each}
+          {/each}
+        {:else if mark.type === 'dot'}
+          {@const dotFillSpec = mark.fill ?? mark.stroke}
+          {@const isFieldDot = typeof dotFillSpec === 'string'
+                               && !dotFillSpec.startsWith('#')
+                               && !!chartData[0]
+                               && (dotFillSpec in chartData[0])}
+          {@const dotUniqValues = isFieldDot
+            ? [...new Set(chartData.map(d => d[dotFillSpec]))]
+                .filter(v => v != null)
+            : []}
+          {@const dotColorFor = (val) => {
+            if (val == null) return dotFillSpec ?? '#0B7A75';
+            if (legend?.items) {
+              const hit = legend.items.find(it => it.label === String(val));
+              if (hit) return hit.color;
+            }
+            // Strict fallback so SveltePlot never picks a stray colour
+            // from its own categorical scale: use scales.color.range by
+            // first-occurrence index, defaulting to brand teal.
+            const idx = dotUniqValues.indexOf(val);
+            return scales.color?.range?.[idx] ?? '#0B7A75';
+          }}
+          {#if isFieldDot}
+            <!-- Per-fill split mirroring the Line per-stroke split so
+                 categories that no longer have rows in chartData (e.g.
+                 after a filter deselect) leave no dots behind. Constant
+                 fill per Dot block keeps SveltePlot from injecting its
+                 own categorical palette. -->
+            {#each dotUniqValues as dVal}
+              {@const dotSubset = chartData.filter(d => d[dotFillSpec] === dVal)}
+              {#if dotSubset.length > 0}
+                <Dot
+                  data={dotSubset}
+                  x={mark.x}
+                  y={mark.y}
+                  fill={dotColorFor(dVal)}
+                  r={mark.r ?? 3}
+                />
+              {/if}
             {/each}
           {:else}
-            <Line
+            <Dot
               data={chartData}
               x={mark.x}
               y={mark.y}
-              stroke={isFieldStroke ? (d) => d[mark.stroke] : mark.stroke}
-              strokeWidth={mark.strokeWidth ?? 2}
+              fill={dotFillSpec ?? undefined}
+              r={mark.r ?? 3}
             />
           {/if}
-        {:else if mark.type === 'dot'}
-          <Dot
-            data={chartData}
-            x={mark.x}
-            y={mark.y}
-            fill={mark.fill ?? mark.stroke ?? undefined}
-            r={mark.r ?? 3}
-          />
         {:else if mark.type === 'bar'}
           {@const isFieldFillY = typeof mark.fill === 'string' && !mark.fill.startsWith('#')}
+          {@const barUniqValues = isFieldFillY
+            ? [...new Set(chartData.map(d => d[mark.fill]))]
+                .filter(v => v != null)
+            : []}
+          {@const barColorFor = (val) => {
+            if (val == null) return mark.fill ?? '#0B7A75';
+            if (legend?.items) {
+              const hit = legend.items.find(it => it.label === String(val));
+              if (hit) return hit.color;
+            }
+            const idx = barUniqValues.indexOf(val);
+            return scales.color?.range?.[idx] ?? '#0B7A75';
+          }}
           <BarY
             data={chartData}
             x={mark.x}
             y={mark.y}
-            fill={isFieldFillY ? (d) => d[mark.fill] : (mark.fill ?? undefined)}
+            fill={isFieldFillY ? (d) => barColorFor(d[mark.fill]) : (mark.fill ?? undefined)}
           />
         {:else if mark.type === 'barH'}
           {@const isFieldFillX = typeof mark.fill === 'string' && !mark.fill.startsWith('#')}
+          {@const barHUniqValues = isFieldFillX
+            ? [...new Set(chartData.map(d => d[mark.fill]))]
+                .filter(v => v != null)
+            : []}
+          {@const barHColorFor = (val) => {
+            if (val == null) return mark.fill ?? '#0B7A75';
+            if (legend?.items) {
+              const hit = legend.items.find(it => it.label === String(val));
+              if (hit) return hit.color;
+            }
+            const idx = barHUniqValues.indexOf(val);
+            return scales.color?.range?.[idx] ?? '#0B7A75';
+          }}
           <BarX
             data={mark.sort ? [...chartData].sort((a, b) => a[mark.x] - b[mark.x]) : chartData}
             x={mark.x}
             y={mark.y}
-            fill={isFieldFillX ? (d) => d[mark.fill] : (mark.fill ?? undefined)}
+            fill={isFieldFillX ? (d) => barHColorFor(d[mark.fill]) : (mark.fill ?? undefined)}
           />
         {:else if mark.type === 'text'}
           <Text

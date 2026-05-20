@@ -77,20 +77,31 @@
   }
 
   /* Range input — filled bar can be thicker than unfilled track via
-     --ambolt-slider-bar-height (defaults to same as track height) */
+     --ambolt-slider-bar-height. The element's own height is sized to
+     accommodate the taller of the two (else WebKit clips the bar's
+     background-image to the element box). Two background layers are
+     drawn vertically centered: the filled bar (var width × bar-height)
+     on top, and the full track (100% × track-height) underneath. */
   input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: var(--ambolt-slider-track-height, 4px);
+    height: max(
+      var(--ambolt-slider-track-height, 4px),
+      var(--ambolt-slider-bar-height, var(--ambolt-slider-track-height, 4px))
+    );
     border-radius: 2px;
     outline: none;
     cursor: pointer;
-    background-color: var(--ambolt-slider-track-bg, #d1d5db);
-    background-image: linear-gradient(var(--slider-color, #4f46e5), var(--slider-color, #4f46e5));
-    background-size: var(--slider-pct, 50%) var(--ambolt-slider-bar-height, var(--ambolt-slider-track-height, 4px));
+    background-color: transparent;
+    background-image:
+      linear-gradient(var(--slider-color, #4f46e5), var(--slider-color, #4f46e5)),
+      linear-gradient(var(--ambolt-slider-track-bg, #d1d5db), var(--ambolt-slider-track-bg, #d1d5db));
+    background-size:
+      var(--slider-pct, 50%) var(--ambolt-slider-bar-height, var(--ambolt-slider-track-height, 4px)),
+      100% var(--ambolt-slider-track-height, 4px);
+    background-position: left center, left center;
     background-repeat: no-repeat;
-    background-position: left center;
   }
 
   /* Thumb — WebKit */
@@ -123,10 +134,11 @@
     box-shadow: 0 0 0 6px color-mix(in srgb, var(--slider-color, #4f46e5) 25%, transparent);
   }
 
-  /* Firefox track fill */
+  /* Firefox track fill — progress uses bar-height so the filled
+     portion can be visually thicker than the empty track. */
   input[type="range"]::-moz-range-progress {
     background: var(--slider-color, #4f46e5);
-    height: var(--ambolt-slider-track-height, 4px);
+    height: var(--ambolt-slider-bar-height, var(--ambolt-slider-track-height, 4px));
     border-radius: 2px;
   }
   input[type="range"]::-moz-range-track {

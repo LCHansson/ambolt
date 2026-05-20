@@ -291,12 +291,20 @@
   }
 
   # --- sidebar_layout (original path) ---
-  # Render sidebar children individually so we can wrap action buttons
-  sidebar_parts <- vapply(ui_tree$sidebar$children, function(child) {
+  # Render sidebar children individually. Non-action children are
+  # collected into a `.primary-inputs` wrapper; the action button (and
+  # its scenario-button fallback) stays as a direct sidebar child so
+  # apps can target the gap between the inputs block and the button via
+  # a single rule on `.sidebar`.
+  is_action_child <- function(child) {
+    is.character(child) && child %in% names(inputs) &&
+      identical(inputs[[child]]$type, "action")
+  }
+  primary_tags <- character(0)
+  trailing_tags <- character(0)
+  for (child in ui_tree$sidebar$children) {
     tag <- .render_tree_node(child, inputs, outputs, port)
-    # If this is an action button, hide it after first trigger and show
-    # scenario buttons in its place (matching Shiny's "button disappears" pattern)
-    if (is.character(child) && child %in% names(inputs) && inputs[[child]]$type == "action") {
+    if (is_action_child(child)) {
       button_wrapped <- sprintf("    {#if !showResults}\n%s\n    {/if}", tag)
       if (length(scenarios) > 0) {
         scenario_buttons <- vapply(seq_along(scenarios), function(i) {
@@ -306,13 +314,21 @@
         scenario_html <- sprintf(
           '    {#if showResults}\n    <div class="sidebar-scenarios">\n      <p class="sidebar-scenarios-label">Du kan ocks\u00e5 testa ett av f\u00f6ljande scenarier:</p>\n      <div class="scenario-buttons">\n%s\n      </div>\n    </div>\n    {/if}',
           paste(scenario_buttons, collapse = "\n"))
-        return(paste(button_wrapped, scenario_html, sep = "\n"))
+        trailing_tags <- c(trailing_tags, paste(button_wrapped, scenario_html, sep = "\n"))
+      } else {
+        trailing_tags <- c(trailing_tags, button_wrapped)
       }
-      return(button_wrapped)
+    } else {
+      primary_tags <- c(primary_tags, tag)
     }
-    tag
-  }, character(1))
-  sidebar_html <- paste(sidebar_parts, collapse = "\n")
+  }
+  sidebar_html <- if (length(primary_tags) > 0) {
+    primary_wrapper <- sprintf('    <div class="primary-inputs">\n%s\n    </div>',
+      paste(primary_tags, collapse = "\n"))
+    paste(c(primary_wrapper, trailing_tags), collapse = "\n")
+  } else {
+    paste(trailing_tags, collapse = "\n")
+  }
   content_items <- .render_tree_children(ui_tree$main$children, inputs, outputs, port)
 
   # Wrap content with empty state / trigger display logic

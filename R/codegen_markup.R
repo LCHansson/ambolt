@@ -42,7 +42,16 @@
 
   # Build props string
   props <- sprintf('id="%s"', id)
-  if (!is.null(args$label)) props <- c(props, sprintf('label="%s"', args$label))
+  if (!is.null(args$label)) {
+    if (!is.null(args$alt_label) && !is.null(args$alt_when)) {
+      cond <- .show_when_condition(args$alt_when)
+      safe_alt <- gsub('"', '&quot;', args$alt_label)
+      safe_lbl <- gsub('"', '&quot;', args$label)
+      props <- c(props, sprintf('label={(%s) ? "%s" : "%s"}', cond, safe_alt, safe_lbl))
+    } else {
+      props <- c(props, sprintf('label="%s"', args$label))
+    }
+  }
 
   # Handle choices (arrays)
   if (!is.null(args$choices)) {
@@ -187,23 +196,38 @@
     props <- c(props, binding)
   }
 
-  # Pass help text as a prop for components that support inline help icons
+  # Pass help text as a prop for components that support inline help icons.
+  # When alt_help + alt_when are provided, emit a reactive prop expression.
   help_text <- input_def$args$help
   types_with_help_prop <- c("numeric", "numeric_with_unit", "select")
   if (!is.null(help_text) && type %in% types_with_help_prop) {
     safe_help <- gsub('"', '&quot;', help_text)
-    props <- c(props, sprintf('help="%s"', safe_help))
+    if (!is.null(args$alt_help) && !is.null(args$alt_when)) {
+      cond <- .show_when_condition(args$alt_when)
+      safe_alt <- gsub('"', '&quot;', args$alt_help)
+      props <- c(props, sprintf('help={(%s) ? "%s" : "%s"}', cond, safe_alt, safe_help))
+    } else {
+      props <- c(props, sprintf('help="%s"', safe_help))
+    }
     help_text <- NULL  # Don't also wrap in input-with-help
   }
 
   tag <- sprintf("    <%s %s />", component, paste(props, collapse = "\n      "))
 
-  # Fallback: wrap with external help tooltip for types that don't support help prop
+  # Fallback: wrap with external help tooltip for types that don't support
+  # the help prop. The text becomes a Svelte expression when alt_help is set.
   if (!is.null(help_text)) {
     safe_help <- gsub('"', '&quot;', help_text)
+    help_html <- if (!is.null(args$alt_help) && !is.null(args$alt_when)) {
+      cond <- .show_when_condition(args$alt_when)
+      safe_alt <- gsub('"', '&quot;', args$alt_help)
+      sprintf('{(%s) ? "%s" : "%s"}', cond, safe_alt, safe_help)
+    } else {
+      safe_help
+    }
     tag <- sprintf(
       '    <div class="input-with-help">\n  %s\n      <span class="help-tooltip"><span class="help-icon">?</span><span class="help-text">%s</span></span>\n    </div>',
-      tag, safe_help)
+      tag, help_html)
   }
 
   # Wrap in {#if} block if show_when is specified

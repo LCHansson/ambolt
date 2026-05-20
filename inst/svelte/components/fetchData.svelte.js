@@ -23,6 +23,12 @@ export function createFetchState(getProps, parser = 'json') {
   let data = $state(null);
   let error = $state(null);
   let loading = $state(false);
+  // `busy` is TRUE for the full lifetime of any fetch (first or re-fetch).
+  // `loading` retains the original "first-fetch-only" semantics so the
+  // line/bar chart "Loading chart..." text doesn't flash on every
+  // slider keystroke. Consumers that want progress feedback on every
+  // re-fetch (e.g. ChartOutput map overlay) should read `busy` instead.
+  let busy = $state(false);
   let debounceTimer = null;
 
   function buildUrl() {
@@ -42,6 +48,7 @@ export function createFetchState(getProps, parser = 'json') {
     // Only show loading spinner on first fetch (when no data exists yet).
     // Subsequent re-fetches keep showing previous data for smooth updates.
     if (data === null) loading = true;
+    busy = true;
     error = null;
 
     fetch(url)
@@ -52,15 +59,22 @@ export function createFetchState(getProps, parser = 'json') {
       .then(result => {
         data = result;
         loading = false;
+        busy = false;
       })
       .catch(err => {
         error = err.message;
         loading = false;
+        busy = false;
       });
   }
 
   function debouncedFetch() {
     clearTimeout(debounceTimer);
+    // Flag busy immediately so consumers (e.g. ChartOutput map overlay)
+    // can show a spinner during the debounce window too — otherwise the
+    // user sees no feedback for the first DEBOUNCE_MS after releasing a
+    // slider on a slow endpoint.
+    busy = true;
     debounceTimer = setTimeout(doFetch, DEBOUNCE_MS);
   }
 
@@ -103,6 +117,7 @@ export function createFetchState(getProps, parser = 'json') {
     get data() { return data; },
     get error() { return error; },
     get loading() { return loading; },
+    get busy() { return busy; },
     refetch: doFetch
   };
 }

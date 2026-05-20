@@ -204,12 +204,26 @@
       path <- sprintf("/api/output/%s", id)
 
       if (type == "plot") {
-        app_env$plot_endpoint(path, render_fn)
+        app_env$.app$get(path, function(req, res) {
+          params <- .enrich_request_params(as.list(req$query), req, res, app_env)
+          plot_obj <- render_fn(params)
+          svg_string <- svglite::svgstring(width = 7, height = 5)
+          print(plot_obj)
+          svg_output <- svg_string()
+          grDevices::dev.off()
+          svg_text <- paste0(as.character(svg_output), collapse = "")
+          res$header("Content-Type", "image/svg+xml")
+          res$send(svg_text)
+        })
       } else if (type == "table" || type == "chart") {
-        app_env$data_endpoint(path, render_fn)
+        app_env$.app$get(path, function(req, res) {
+          params <- .enrich_request_params(as.list(req$query), req, res, app_env)
+          result <- render_fn(params)
+          res$json(result)
+        })
       } else if (type == "html") {
         app_env$.app$get(path, function(req, res) {
-          params <- as.list(req$query)
+          params <- .enrich_request_params(as.list(req$query), req, res, app_env)
           html_string <- render_fn(params)
           res$header("Content-Type", "text/html; charset=utf-8")
           res$send(html_string)
@@ -217,6 +231,46 @@
       }
     })
   }
+}
+
+#' Enrich render-function params with per-request analytics fields.
+#'
+#' Injects a server-issued session token (`.session`), client IP
+#' (`.client_ip`), and User-Agent (`.user_agent`) into the params list
+#' passed to output render functions. The session token is read from
+#' the `ambolt_session` cookie if present; otherwise a fresh token is
+#' generated and a Set-Cookie header is added to the response.
+#'
+#' The token is opaque, stable per browser session, and intended for
+#' anonymous analytics (event logging). It does not authenticate the
+#' user — that role belongs to the auth subsystem.
+#' @noRd
+.enrich_request_params <- function(params, req, res, app_env) {
+  cookie_header <- req$HTTP_COOKIE %||% ""
+  m <- regmatches(cookie_header,
+                  regexec("(?:^|;\\s*)ambolt_session=([^;]+)", cookie_header))[[1]]
+  token <- if (length(m) >= 2) m[2] else NULL
+  if (is.null(token) || !nzchar(token)) {
+    token <- .new_session_token()
+    # 30-day HttpOnly cookie. Secure flag is added by the reverse
+    # proxy in production; we don't set it here so dev (http) works.
+    res$header(
+      "Set-Cookie",
+      sprintf("ambolt_session=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d",
+              token, 30L * 86400L)
+    )
+  }
+  params$.session <- token
+  params$.client_ip <- req$HTTP_X_FORWARDED_FOR %||% req$REMOTE_ADDR %||% ""
+  params$.user_agent <- req$HTTP_USER_AGENT %||% ""
+  params
+}
+
+#' Generate a fresh opaque session token (32 hex chars).
+#' @noRd
+.new_session_token <- function() {
+  bytes <- as.integer(sample.int(256L, size = 16L, replace = TRUE)) - 1L
+  paste(sprintf("%02x", bytes), collapse = "")
 }
 
 #' Register modal endpoints (GET /api/modal/{id})

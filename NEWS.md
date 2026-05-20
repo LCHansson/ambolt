@@ -1,3 +1,109 @@
+# ambolt 0.1.0.9067
+
+* **Dynamic labels and help text via `alt_label` / `alt_help` /
+  `alt_when`.** `app$input()` now accepts an `alt_label` (and/or
+  `alt_help`) plus an `alt_when` condition (same shape as `show_when`:
+  named list of `input_id -> allowed_value(s)`). When the condition
+  evaluates truthy in the running app, the alt text replaces the
+  primary `label` / `help`; otherwise the primary text shows. Useful
+  for inputs that need to reflect another input's choice — e.g. an EK
+  van switching its fuel type from diesel to bensin should retitle
+  every related label and help tooltip. Implemented as a Svelte
+  ternary expression on the prop at codegen time; works for both
+  prop-based help (numeric, numeric_with_unit, select) and the
+  external `.input-with-help` tooltip wrapper used by the other input
+  types.
+
+# ambolt 0.1.0.9066
+
+* **SliderInput: fix filled-bar height clipping.** Previously, setting
+  `--ambolt-slider-bar-height` larger than `--ambolt-slider-track-height`
+  had no visible effect on WebKit because the range input's element
+  height was sized to the track-height, clipping the bar's
+  background-image. The input element is now sized to the max of the
+  two heights, and two layered backgrounds are drawn (filled bar on
+  top, full track underneath), each at its own height and vertically
+  centered. Firefox's `::-moz-range-progress` now also uses
+  `bar-height`. Apps that don't set `bar-height` (and therefore inherit
+  it from `track-height`) are visually unchanged.
+
+# ambolt 0.1.0.9065
+
+* **Server-issued analytics session token.** Output render functions
+  registered via `app$output()` now receive three extra fields on the
+  `params` list passed to their render handler:
+  * `params$.session` — opaque per-browser token (32 hex chars), read
+    from the `ambolt_session` HttpOnly cookie. A fresh token is
+    minted and the cookie set the first time a client hits any
+    `/api/output/*` endpoint without one. 30-day Max-Age, SameSite=Lax.
+    Intended for anonymous event logging — separate from the `auth`
+    subsystem's user session.
+  * `params$.client_ip` — value of `X-Forwarded-For` if present,
+    otherwise `REMOTE_ADDR`.
+  * `params$.user_agent` — value of the `User-Agent` request header.
+  Apps that don't need these fields can ignore them; existing render
+  functions are unaffected since the names start with a dot and won't
+  collide with declared input ids.
+
+# ambolt 0.1.0.9064
+
+* **`createFetchState`: separate `busy` from `loading`.** `loading`
+  still flips true only on the first fetch (preserving the no-flash
+  re-fetch behaviour for line / bar / table outputs); a new `busy`
+  field is true for the lifetime of any fetch, including re-fetches.
+  Map ChartOutput now uses `busy` for its loading overlay so filter
+  changes show a spinner immediately instead of leaving the canvas
+  silent while the server crunches a 4–6 s query. `busy` is also
+  flipped on at the start of the debounce window so consumers see
+  feedback before the `DEBOUNCE_MS` delay elapses.
+* **ChartOutput dot/bar colour resolution: strict fallback.** When a
+  rendered category has no matching `legend.items` entry,
+  Dot / BarY / BarX now fall back to `scales.color.range` by
+  first-occurrence index (and finally to brand teal), instead of
+  returning `undefined` and letting SveltePlot pick a colour from its
+  own categorical palette. This eliminated a class of legend ↔ chart
+  mismatches where the legend was correct but the dots overlaying
+  the line ended up in a different (gold / orange) hue.
+
+# ambolt 0.1.0.9063
+
+* **`sidebar_layout()` wraps primary inputs.** Non-action sidebar
+  children are now emitted inside a `<div class="primary-inputs">`
+  block, while action buttons (and the optional scenario-button
+  fallback) stay as direct children of `.sidebar`. Apps can now set
+  the gap between the inputs block and the action button with a
+  single rule on `.sidebar` (e.g. `display: flex; gap: 32px;`)
+  instead of relying on adjacent-sibling margins across the input
+  set. Purely additive DOM change — apps that do not target the new
+  class are unaffected.
+
+# ambolt 0.1.0.9062
+
+* **ChartOutput line marks: per-(stroke, linetype) split.** Line
+  rendering now emits one `<Line>` per cross-product of unique stroke
+  and linetype values, each with a constant stroke color and dash
+  pattern. SveltePlot's `<Line>` does not auto-split series when
+  `stroke` is an accessor returning categorical strings — it draws a
+  single path with per-point coloring, producing visible "bind"
+  segments between distinct categories. The explicit split removes
+  that artefact and guarantees one independent path per category.
+* **ChartOutput color resolution via `legend.items`.** Line, BarY and
+  BarX now resolve fill / stroke colors by looking up the rendered
+  category value in `spec.legend.items[*].label` (single source of
+  truth shared with the legend swatch). Falls back to
+  `scales.color.range` by index when no legend is present. Eliminates
+  legend ↔ chart color mismatches that arose when SveltePlot's
+  internal category ordering diverged from the legend's
+  first-occurrence order.
+* **ChartOutput map view: spinner during server fetch + previous map
+  retained.** The map branch now renders whenever `geoFeatures` exist,
+  even while `fetch_state.loading` is true, with the
+  `map-loading-overlay` drawn on top. Previous geo features are
+  retained across filter changes; they are cleared only when the
+  `geojson_endpoint` changes (KPI / geo-level change). Filter changes
+  on a map view no longer blank the canvas with a generic
+  "Loading chart…" text.
+
 # ambolt 0.1.0.9061
 
 * **ChartOutput map loading overlay.** Choropleth view shows a centered
