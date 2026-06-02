@@ -1,3 +1,184 @@
+# ambolt 0.2.0.9000
+
+## Bug fixes
+
+* `.serve_static()` now registers an explicit route for the
+  `empty_state(image = ...)` asset. Previously the image was copied to
+  `dist/` by `.scaffold_project()` but no production route served it,
+  so `<img src="/<image>">` returned 404 in prod (worked in dev because
+  Vite's dev server serves `public/` automatically). Discovered when
+  the empty-state illustration for Elektrifieringskollen disappeared
+  after deployment to a Docker/ambiorix host. Only the declared
+  `empty_state$image` is exposed — no blanket static mount on the
+  `dist/` root.
+* `.scaffold_project()` now terminates `export default app` with an
+  explicit semicolon before the user's `init_script` is appended.
+  Without it, an `init_script` beginning with `(`, `[`, `+`, `-`,
+  `*` or `/` is absorbed by JavaScript's Automatic Semicolon
+  Insertion as a call / index / operator on the previous expression
+  (e.g. an IIFE becomes `export default app(function(){...})()`,
+  throwing TypeError at module load and silently swallowing the
+  user's code).
+
+# ambolt 0.2.0
+
+First tagged release since 0.1.0. Consolidates 67 development bumps
+(0.1.0.9001–0.1.0.9067) driven by three production apps — Elektrifieringskollen, Statistikutforskaren and Val26 — into a coherent
+themed release, and adds five new framework features. Tagged
+`# Pre-release entries (0.1.0.9001–9067)` section below preserves the
+granular per-bump notes for traceability.
+
+## Inputs
+
+* New `search_results_panel` — data-driven server-backed search results
+  with source filtering, basket integration, and dual action buttons
+  (open / add-to-basket). Pairs with the new `BasketPanel`.
+* New `viz_type_selector` — horizontal icon button group for visualization
+  type selection (Bootstrap Icons: line / bar / map). Per-button disabled
+  state for data-dependent availability.
+* New `multi_view_panel` — input that exposes a saved-view selector backed
+  by `MultiViewPanel.svelte` and the basket store.
+* `server_search` gains a `liveEndpoint` + `liveSources` fallback: when
+  the main search index has no hit, dropdown offers per-source live-search
+  buttons.
+* `app$input()` accepts `alt_label` / `alt_help` / `alt_when` — dynamic
+  re-labelling of any input based on the value of another input.
+
+## Outputs: ChartOutput
+
+* Categorical legend reading `chart_spec.legend.items[]` (color + label
+  + linetype). Strict fallback to `scales.color.range` by first-occurrence
+  index — eliminates the legend ↔ chart color mismatch class of bugs.
+* PNG / SVG download buttons in the control row (2× density for PNG,
+  vector + inlined computed CSS for SVG).
+* Line marks per-(stroke, linetype) split so SveltePlot draws one
+  independent path per category instead of one with hidden "bind" segments.
+* Choropleth: spinner overlay during GeoJSON fetch + join; previous map
+  retained across filter changes; switched to `geoConicEqualArea`.
+* Tooltip overhaul: key-value grid layout with humanised labels, period
+  block derived from `year` + `period_label`, dedup + label preference
+  (`<dim>_label` shadows `<dim>` when both present), implicit-total
+  hiding, viewport-flip on the right 35 % of the page.
+* Empty-state branch surfaces the chart's `title` instead of a hard-coded
+  string so apps can pass an actionable hint via `chart_spec(title=...)`.
+* `createFetchState`: separate `busy` from `loading` — map loading
+  overlay now shows during *re-fetches* too, not just the initial load.
+
+## New components
+
+* `BasketPanel` — fixed-position panel that collects data series across
+  searches; collapsible; pairs with `search_results_panel`.
+* `KpiInfoModal` — `<dialog>` modal that lazy-fetches metadata for a
+  search hit and renders source-specific extras.
+* `MultiViewPanel` — host-app saved-views explorer driven by `basketStore`.
+* `FilterRenderer` gains compatibility-based dim disabling (`kpi_specs`
+  with `valid_combos`), freshness partitioning (stale hits below a
+  divider with reduced opacity), and server-driven `totalt_code` defaults.
+
+## Layout & API
+
+* `page_content()` accepted as a top-level layout node (analogous to
+  Shiny's `fluidPage`). Nested `sidebar_layout()` inside still works.
+* `app$init_script(js)` — injects custom JavaScript after the Svelte app
+  mounts (URL state initialisation, analytics, debug tooling).
+* `app$run(clean = TRUE)` — removes the whole `.ambolt_build/` (including
+  `node_modules` and the Vite cache) before starting. Use when build
+  caches are inconsistent.
+* `sidebar_layout()` wraps primary inputs in a `<div class="primary-inputs">`
+  so apps can space the input block from the action button with a single
+  gap rule on `.sidebar`.
+* Output render functions receive three extra `params` fields:
+  `.session` (per-browser analytics token from the `ambolt_session`
+  cookie), `.client_ip` (`X-Forwarded-For` or `REMOTE_ADDR`), `.user_agent`.
+
+## Theming — NEW in 0.2
+
+* **Design tokens.** `app$theme(tokens = list(color = ..., font = ...,
+  radius = ..., space = ..., shadow = ...))` is the new structured
+  theming API. Nested grammar, additive (deep-merge) across calls, and
+  a 12-key color vocabulary (`primary`, `secondary`, `surface`,
+  `surface_alt`, `text`, `text_muted`, `border`, `success`, `warning`,
+  `danger`, `accent` + auto-derived `_hover/_muted/_focus` via CSS
+  `color-mix`). Cascade: design tokens → legacy `colors=`/`components=`
+  → raw `css=` (later wins). See `vignette("theming")` and
+  `tests/testthat/test-theme-tokens.R`.
+
+## Framework hardening — NEW in 0.2
+
+* **Partial-match audit.** All codegen files (`codegen_script.R`,
+  `codegen_markup.R`, `codegen_tree.R`, `codegen_layout.R`,
+  `codegen_css.R`) converted from `f$X` to `f[["X"]]` for list-spec
+  field lookups. Eliminates the entire class of partial-match
+  corruption bugs that the 0.1.0.9026 fix only addressed in the cards
+  branch. `options(warnPartialMatchDollar = TRUE)` is set in the test
+  helper so any future regression warns. New regression test
+  `test-codegen-partial-match.R` exercises all module-output branches
+  with intentionally prefix-colliding specs.
+* **html_block contract locked.** Scripts attached via
+  `html_block(script = ...)` now execute equivalently in page context
+  (codegen elevates via `.tree_collect_scripts`) and in modal context
+  (runtime `RenderNode.svelte`). Locked by paritet-tests; documented in
+  the `html_block()` roxygen.
+* **html_block escape heuristic.** Construction-time warning when
+  `script=` contains the broken pattern `="<TAG ... ATTR="` — the
+  signature of the R string-escape foot-gun that bit Val26 (Jämför
+  partier). Suppressible via `.check_script_escapes = FALSE`.
+* **`date_range` script-side state.** The codegen now emits the
+  `_start` / `_end` state variables that `bind:start={..._start}
+  bind:end={..._end}` needs. The script-side branch was missing
+  pre-0.2 — the binding was generated but the state variables were
+  not, so a `date_range` input with a default `value=` would crash
+  codegen and a default-less one would render but never bind. EK and
+  SU don't use the type so the gap was undiscovered.
+* **`date_range` in default `depends_on`.** When `app$output(...)`
+  uses the implicit "depends on all inputs" rule, any `date_range`
+  input now expands into the two state names the codegen actually
+  binds (`{id}_start` and `{id}_end`) instead of the bare `id`. The
+  bare name resolved to `undefined` in Svelte's params shorthand,
+  causing the fetch to silently fail and the output to stay blank.
+* **Layout-only apps boot.** `app$run()` now treats a non-null
+  `app$.ui_tree` (no inputs, no outputs, no pages) as a valid build
+  target instead of falling through to `app$start()` with zero
+  ambiorix routes (which errors out). A purely structural example
+  like `02-layout` now runs.
+* **Route-shadow warning.** `mod$get`/`$post`/`$put`/`$delete` track a
+  per-app route registry and emit a `warning()` at registration time
+  when a literal route would be shadowed by an earlier `:param` route
+  of the same method and shape. Closes the silent-404 foot-gun
+  documented in observations.md 2026-04-15.
+* **`fetch_section` primitive.** New output `type = "fetch_section"`.
+  Render handler returns either an HTML string or a layout-DSL tree
+  (`page_content`/`section`/`columns`/`html_block`/`page_header`); the
+  framework walks the tree to static HTML server-side. Optional
+  `refresh_event` re-fetches on a named DOM event. Replaces the raw-JS
+  fetch loops that dashboards previously needed.
+
+## Examples
+
+* New `inst/examples/` directory with six runnable mini-apps showcasing
+  the core surface: `01-hello`, `02-layout`, `03-inputs-gallery`,
+  `04-chart-and-table`, `05-auth-multipage`, `06-modal-form`. Run via
+  `ambolt::run_example("01-hello")`; list via `ambolt::list_examples()`.
+  Pattern mirrors `shiny::runExample`.
+* Examples that need runtime context (login credentials, ports, setup
+  hints) ship a `NOTES.md` that `run_example()` prints to the console
+  at startup. `05-auth-multipage` uses this to surface its `demo`/`demo`
+  login before the browser opens.
+
+## Documentation
+
+* New vignette `vignette("theming")` — covers the design-token system,
+  cascade ordering, and the additive-merge contract.
+* `man/` regenerated from updated roxygen (route warnings, html_block
+  escape parameter, theme tokens, run_example).
+
+
+## Pre-release entries (0.1.0.9001-9067, kept for traceability)
+
+The themed entries above consolidate the per-bump notes that follow.
+Kept verbatim for spårbarhet — search here for which commit introduced
+a particular feature or fix.
+
 # ambolt 0.1.0.9067
 
 * **Dynamic labels and help text via `alt_label` / `alt_help` /

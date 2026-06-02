@@ -10,7 +10,7 @@
 #'
 #' @param build_base Character. Path to the project directory.
 #' @param app_env The ambolt app environment (for code generation).
-#' @param mode Character. "prod" or "dev" — controls vite config and package.json.
+#' @param mode Character. "prod" or "dev" -- controls vite config and package.json.
 #' @return Invisibly returns build_base.
 #' @noRd
 .scaffold_project <- function(build_base, app_env, mode = "prod", app_svelte = NULL) {
@@ -41,8 +41,14 @@
     file.path(src_dir, "app.css"))
 
   init_script <- app_env$.init_script %||% ""
+  # Explicit semicolon after `export default app` so an init_script that
+  # starts with `(`, `[`, `+`, `-`, `*` or `/` is not absorbed by JS's
+  # Automatic Semicolon Insertion as an argument list / member access on
+  # the previous expression. Without this, e.g. an IIFE in init_script
+  # gets parsed as `export default app(function(){...})()`, throwing
+  # TypeError at module load and silently swallowing the user's code.
   writeLines(
-    paste0("import { mount } from 'svelte'\nimport './app.css'\nimport App from './App.svelte'\nconst app = mount(App, { target: document.getElementById('app') })\nexport default app\n", init_script),
+    paste0("import { mount } from 'svelte'\nimport './app.css'\nimport App from './App.svelte'\nconst app = mount(App, { target: document.getElementById('app') })\nexport default app;\n", init_script),
     file.path(src_dir, "main.js"))
 
   # Write index.html using meta settings
@@ -55,7 +61,7 @@
     meta$lang, favicon_tag, meta$title),
     file.path(build_base, "index.html"))
 
-  # Write vite.config.js — dev mode adds API proxy
+  # Write vite.config.js -- dev mode adds API proxy
   if (mode == "dev") {
     api_target <- sprintf("http://%s:%d", app_env$.host, app_env$.port)
     writeLines(sprintf(
@@ -69,7 +75,7 @@
       file.path(build_base, "vite.config.js"))
   }
 
-  # Write package.json — dev mode includes "dev" script
+  # Write package.json -- dev mode includes "dev" script
   if (mode == "dev") {
     writeLines(
       '{"name":"ambolt-generated","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build"},"devDependencies":{"@sveltejs/vite-plugin-svelte":"^5.0.0","svelte":"^5.0.0","vite":"^6.0.0"},"dependencies":{"flatpickr":"^4.6.13","svelteplot":"^0.14.0"}}',
@@ -102,7 +108,7 @@
 #' since last build, serves the cached dist/ instantly.
 #' @noRd
 .generate_and_build <- function(app_env) {
-  # Use a persistent directory instead of tempdir() — survives restarts
+  # Use a persistent directory instead of tempdir() -- survives restarts
   build_base <- Sys.getenv("AMBOLT_BUILD_DIR", "")
   if (build_base == "") {
     build_base <- file.path(getwd(), ".ambolt_build")
@@ -228,6 +234,29 @@
           res$header("Content-Type", "text/html; charset=utf-8")
           res$send(html_string)
         })
+      } else if (type == "fetch_section") {
+        # Declarative replacement for raw `html_block(script=...)` fetch
+        # loops in dashboards. The render handler can return either a raw
+        # HTML string OR a layout-DSL tree (page_content/section/columns/
+        # html_block/page_header/badge/detail_grid/detail_row/action_bar/
+        # details). Components that need the Svelte runtime
+        # (DataTable, ChartOutput, ...) are not supported here -- use a
+        # regular `type = "html"` output and `html_block(html = ...)` for
+        # those, or compose the dashboard as a top-level page.
+        app_env$.app$get(path, function(req, res) {
+          params <- .enrich_request_params(as.list(req$query), req, res, app_env)
+          out <- render_fn(params)
+          html_string <- if (is.character(out) && length(out) == 1) {
+            out
+          } else if (is.list(out) && !is.null(out[["type"]])) {
+            .render_static_html(out)
+          } else {
+            stop("fetch_section render must return a character(1) HTML string ",
+                 "or a layout-DSL tree; got: ", class(out)[1])
+          }
+          res$header("Content-Type", "text/html; charset=utf-8")
+          res$send(html_string)
+        })
       }
     })
   }
@@ -243,7 +272,7 @@
 #'
 #' The token is opaque, stable per browser session, and intended for
 #' anonymous analytics (event logging). It does not authenticate the
-#' user — that role belongs to the auth subsystem.
+#' user -- that role belongs to the auth subsystem.
 #' @noRd
 .enrich_request_params <- function(params, req, res, app_env) {
   cookie_header <- req$HTTP_COOKIE %||% ""
@@ -301,14 +330,57 @@
 #' Serve static files from a directory
 #' @noRd
 .serve_static <- function(app_env, dist_dir) {
-  # Map dist/assets/ to /assets/ URL prefix — this is where Vite puts built JS/CSS
+  # Map dist/assets/ to /assets/ URL prefix -- this is where Vite puts built JS/CSS
   app_env$.app$static(file.path(dist_dir, "assets"), "assets")
+
+  # Public assets declared via app$empty_state(image = ...) live at dist/
+  # root after Vite copies them from public/. Register an explicit route
+  # rather than mounting the whole dist directory (avoids /-shadowing and
+  # narrows the attack surface to declared assets).
+  empty_state <- app_env$.empty_state
+  if (!is.null(empty_state) && !is.null(empty_state$image) &&
+      nzchar(empty_state$image)) {
+    .register_public_asset(app_env, dist_dir, empty_state$image)
+  }
 
   # Serve index.html for the root path
   app_env$.app$get("/", function(req, res) {
     index_path <- file.path(dist_dir, "index.html")
     res$header("Content-Type", "text/html")
     res$send(readLines(index_path, warn = FALSE) |> paste(collapse = "\n"))
+  })
+}
+
+#' Register a GET route for a single file in `dist/`
+#'
+#' Used by `.serve_static()` to expose declared public assets (e.g. the
+#' empty-state image). Reads the file as raw bytes and sets Content-Type
+#' from the extension so binary formats like PNG arrive intact.
+#' @noRd
+.register_public_asset <- function(app_env, dist_dir, asset_name) {
+  ext <- tolower(tools::file_ext(asset_name))
+  content_type <- switch(ext,
+    "png"  = "image/png",
+    "jpg"  = "image/jpeg",
+    "jpeg" = "image/jpeg",
+    "gif"  = "image/gif",
+    "svg"  = "image/svg+xml",
+    "webp" = "image/webp",
+    "ico"  = "image/x-icon",
+    "application/octet-stream"
+  )
+  route <- paste0("/", asset_name)
+  app_env$.app$get(route, function(req, res) {
+    asset_path <- file.path(dist_dir, asset_name)
+    if (!file.exists(asset_path)) {
+      res$status <- 404L
+      res$send("Not found")
+      return(NULL)
+    }
+    bytes <- readBin(asset_path, what = "raw",
+                     n = file.info(asset_path)$size)
+    res$header("Content-Type", content_type)
+    res$send(bytes)
   })
 }
 
