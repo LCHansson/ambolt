@@ -53,5 +53,5 @@ HTML string
 \description{
 Creates a button that triggers a fetch request when clicked.
 Uses data-ambolt-* attributes processed by the declarative action handler
-in Modal.svelte. No inline JS — all behavior is driven by data attributes.
+in Modal.svelte. No inline JS -- all behavior is driven by data attributes.
 }

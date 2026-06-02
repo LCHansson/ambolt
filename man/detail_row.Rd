@@ -9,7 +9,7 @@ detail_row(label, value)
 \arguments{
 \item{label}{Row label (bold)}
 
-\item{value}{Row value (can contain HTML — not escaped)}
+\item{value}{Row value (can contain HTML -- not escaped)}
 }
 \value{
 HTML string

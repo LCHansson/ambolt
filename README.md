@@ -48,13 +48,20 @@ No JavaScript, no HTML templates — just R.
 
 - **Multi-page apps** with sidebar navigation and URL routing
 - **Built-in components**: interactive tables, stat cards, modals, forms,
-  card grids, plots, and date pickers
+  card grids, plots (SveltePlot), maps, search panels, and date pickers
 - **Authentication** with login pages, session cookies, and rate limiting
-- **Theming**: set your brand colors in one place and every component
-  picks them up
+- **Design tokens**: a structured `app$theme(tokens = list(color = ...,
+  font = ..., space = ..., shadow = ...))` API with 12 semantic color
+  keys, auto-derived hover/muted/focus variants, and additive merging
+  across calls
+- **Declarative dashboard sections** via `type = "fetch_section"` so
+  data-driven panels don't need raw JS fetch loops
 - **Responsive layout** that works on desktop and mobile
 - **An escape hatch** for custom HTML/JS when the built-in components
-  aren't enough
+  aren't enough — with construction-time warnings for the most common
+  string-escape and routing foot-guns
+- **A runnable example gallery**: `ambolt::run_example("01-hello")` and
+  five other mini-apps shipped in `inst/examples/`
 
 ## In production
 
@@ -77,7 +84,9 @@ extend the 30+ built-in components in `inst/svelte/components/`.
 - `vignette("getting-started", package = "ambolt")` — hello world through
   layout primitives
 - `vignette("multi-page-with-auth", package = "ambolt")` — pages, modules,
-  modals, authentication, and theming
+  modals, authentication
+- `vignette("theming", package = "ambolt")` — the design-token system
+- `ambolt::list_examples()` — runnable example apps shipped with the package
 - [Changelog](NEWS.md)
 - [Contributing](CONTRIBUTING.md)
 

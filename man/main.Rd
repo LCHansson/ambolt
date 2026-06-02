@@ -2,7 +2,7 @@
 % Please edit documentation in R/layout_dsl.R
 \name{main}
 \alias{main}
-\title{Main content panel — right column in a sidebar_layout.}
+\title{Main content panel -- right column in a sidebar_layout.}
 \usage{
 main(...)
 }
@@ -13,5 +13,5 @@ main(...)
 A layout node (named list with \code{type = "main"}).
 }
 \description{
-Main content panel — right column in a sidebar_layout.
+Main content panel -- right column in a sidebar_layout.
 }

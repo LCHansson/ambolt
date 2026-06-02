@@ -35,34 +35,34 @@
 #' Generate Svelte markup for a single input
 #' @noRd
 .generate_input_markup <- function(input_def) {
-  id <- input_def$id
-  type <- input_def$type
-  args <- input_def$args
+  id <- input_def[["id"]]
+  type <- input_def[["type"]]
+  args <- input_def[["args"]]
   component <- .input_component_name(type)
 
   # Build props string
   props <- sprintf('id="%s"', id)
-  if (!is.null(args$label)) {
-    if (!is.null(args$alt_label) && !is.null(args$alt_when)) {
-      cond <- .show_when_condition(args$alt_when)
-      safe_alt <- gsub('"', '&quot;', args$alt_label)
-      safe_lbl <- gsub('"', '&quot;', args$label)
+  if (!is.null(args[["label"]])) {
+    if (!is.null(args[["alt_label"]]) && !is.null(args[["alt_when"]])) {
+      cond <- .show_when_condition(args[["alt_when"]])
+      safe_alt <- gsub('"', '&quot;', args[["alt_label"]])
+      safe_lbl <- gsub('"', '&quot;', args[["label"]])
       props <- c(props, sprintf('label={(%s) ? "%s" : "%s"}', cond, safe_alt, safe_lbl))
     } else {
-      props <- c(props, sprintf('label="%s"', args$label))
+      props <- c(props, sprintf('label="%s"', args[["label"]]))
     }
   }
 
   # Handle choices (arrays)
-  if (!is.null(args$choices)) {
-    if (is.null(names(args$choices))) {
+  if (!is.null(args[["choices"]])) {
+    if (is.null(names(args[["choices"]]))) {
       # Simple string vector
-      choices_js <- sprintf("[%s]", paste(sprintf("'%s'", args$choices), collapse = ", "))
+      choices_js <- sprintf("[%s]", paste(sprintf("'%s'", args[["choices"]]), collapse = ", "))
     } else {
       # Named vector -> {value, label} objects
       items <- mapply(function(val, lab) {
         sprintf("{ value: '%s', label: '%s' }", val, lab)
-      }, args$choices, names(args$choices), SIMPLIFY = TRUE)
+      }, args[["choices"]], names(args[["choices"]]), SIMPLIFY = TRUE)
       choices_js <- sprintf("[%s]", paste(items, collapse = ", "))
     }
     props <- c(props, sprintf("choices={%s}", choices_js))
@@ -76,116 +76,116 @@
   }
 
   # String props
-  if (!is.null(args$placeholder)) {
-    props <- c(props, sprintf('placeholder="%s"', args$placeholder))
+  if (!is.null(args[["placeholder"]])) {
+    props <- c(props, sprintf('placeholder="%s"', args[["placeholder"]]))
   }
 
   # Unit prop (for numeric_with_unit and slider)
-  if (!is.null(args$unit)) {
-    props <- c(props, sprintf('unit="%s"', args$unit))
+  if (!is.null(args[["unit"]])) {
+    props <- c(props, sprintf('unit="%s"', args[["unit"]]))
   }
 
   # Color prop (for slider accent color)
-  if (!is.null(args$color)) {
-    props <- c(props, sprintf('color="%s"', args$color))
+  if (!is.null(args[["color"]])) {
+    props <- c(props, sprintf('color="%s"', args[["color"]]))
   }
 
   # Variant prop (for action buttons and radio)
-  if (!is.null(args$variant)) {
-    props <- c(props, sprintf('variant="%s"', args$variant))
+  if (!is.null(args[["variant"]])) {
+    props <- c(props, sprintf('variant="%s"', args[["variant"]]))
   }
 
   # Icons prop (for radio button-bar with SVG icons)
-  if (!is.null(args$icons)) {
+  if (!is.null(args[["icons"]])) {
     icon_entries <- mapply(function(val, svg) {
       # Escape backticks in SVG content for JS template safety
       safe_svg <- gsub("`", "\\\\`", svg)
       sprintf("'%s': `%s`", val, safe_svg)
-    }, names(args$icons), args$icons, SIMPLIFY = TRUE, USE.NAMES = FALSE)
+    }, names(args[["icons"]]), args[["icons"]], SIMPLIFY = TRUE, USE.NAMES = FALSE)
     icons_js <- paste0("{ ", paste(icon_entries, collapse = ", "), " }")
     props <- c(props, paste0("icons={", icons_js, "}"))
   }
 
   # Server search props (endpoint, baseUrl, debounce, live-search fallback)
   if (type == "server_search") {
-    if (!is.null(args$endpoint)) {
-      props <- c(props, sprintf('endpoint="%s"', args$endpoint))
+    if (!is.null(args[["endpoint"]])) {
+      props <- c(props, sprintf('endpoint="%s"', args[["endpoint"]]))
     }
-    if (!is.null(args$base_url)) {
-      props <- c(props, sprintf('baseUrl="%s"', args$base_url))
+    if (!is.null(args[["base_url"]])) {
+      props <- c(props, sprintf('baseUrl="%s"', args[["base_url"]]))
     }
-    if (!is.null(args$debounce)) {
-      props <- c(props, sprintf("debounce={%s}", args$debounce))
+    if (!is.null(args[["debounce"]])) {
+      props <- c(props, sprintf("debounce={%s}", args[["debounce"]]))
     }
-    if (!is.null(args$live_endpoint)) {
-      props <- c(props, sprintf('liveEndpoint="%s"', args$live_endpoint))
+    if (!is.null(args[["live_endpoint"]])) {
+      props <- c(props, sprintf('liveEndpoint="%s"', args[["live_endpoint"]]))
     }
-    if (!is.null(args$live_sources)) {
-      src_json <- jsonlite::toJSON(args$live_sources, auto_unbox = TRUE)
+    if (!is.null(args[["live_sources"]])) {
+      src_json <- jsonlite::toJSON(args[["live_sources"]], auto_unbox = TRUE)
       props <- c(props, sprintf("liveSources={%s}", src_json))
     }
     # Bind searchQuery to {id}_query state variable (Enter → results page)
-    props <- c(props, sprintf("bind:searchQuery={%s_query}", input_def$id))
+    props <- c(props, sprintf("bind:searchQuery={%s_query}", input_def[["id"]]))
   }
 
   # DynamicFilters: spec_endpoint, trigger (other input id), trigger_param_name, year bounds
   if (type == "dynamic_filters") {
-    if (!is.null(args$spec_endpoint)) {
-      props <- c(props, sprintf('spec_endpoint="%s"', args$spec_endpoint))
+    if (!is.null(args[["spec_endpoint"]])) {
+      props <- c(props, sprintf('spec_endpoint="%s"', args[["spec_endpoint"]]))
     }
-    if (!is.null(args$trigger)) {
+    if (!is.null(args[["trigger"]])) {
       # Pass the value of another input as a Svelte expression
-      props <- c(props, sprintf("trigger_value={%s}", args$trigger))
+      props <- c(props, sprintf("trigger_value={%s}", args[["trigger"]]))
     }
-    if (!is.null(args$trigger_param_name)) {
-      props <- c(props, sprintf('trigger_param_name="%s"', args$trigger_param_name))
+    if (!is.null(args[["trigger_param_name"]])) {
+      props <- c(props, sprintf('trigger_param_name="%s"', args[["trigger_param_name"]]))
     }
-    if (!is.null(args$year_min)) {
-      props <- c(props, sprintf("year_min={%s}", args$year_min))
+    if (!is.null(args[["year_min"]])) {
+      props <- c(props, sprintf("year_min={%s}", args[["year_min"]]))
     }
-    if (!is.null(args$year_max)) {
-      props <- c(props, sprintf("year_max={%s}", args$year_max))
+    if (!is.null(args[["year_max"]])) {
+      props <- c(props, sprintf("year_max={%s}", args[["year_max"]]))
     }
   }
 
   # SearchResultsPanel: bind query to a state variable (typically kpi_search_query)
   if (type == "search_results_panel") {
-    if (!is.null(args$query_var)) {
-      props <- c(props, sprintf("query={%s}", args$query_var))
+    if (!is.null(args[["query_var"]])) {
+      props <- c(props, sprintf("query={%s}", args[["query_var"]]))
     }
   }
 
   # MultiViewPanel: bind filters to a state variable
   if (type == "multi_view_panel") {
-    if (!is.null(args$filters_var)) {
-      props <- c(props, sprintf("filters={%s}", args$filters_var))
+    if (!is.null(args[["filters_var"]])) {
+      props <- c(props, sprintf("filters={%s}", args[["filters_var"]]))
     }
   }
 
   # MultiSelect: choices is array of {code, text} (different from select's {value, label})
-  if (type == "multi_select" && !is.null(args$choices)) {
-    items <- if (is.null(names(args$choices))) {
-      vapply(args$choices, function(c) sprintf("{ code: '%s', text: '%s' }", c, c),
+  if (type == "multi_select" && !is.null(args[["choices"]])) {
+    items <- if (is.null(names(args[["choices"]]))) {
+      vapply(args[["choices"]], function(c) sprintf("{ code: '%s', text: '%s' }", c, c),
              character(1))
     } else {
       mapply(function(code, text) sprintf("{ code: '%s', text: '%s' }", code, text),
-             args$choices, names(args$choices), SIMPLIFY = TRUE, USE.NAMES = FALSE)
+             args[["choices"]], names(args[["choices"]]), SIMPLIFY = TRUE, USE.NAMES = FALSE)
     }
     # Replace the existing choices prop (already added above for inputs that have it)
     props <- props[!grepl("^choices=", props)]
     props <- c(props, sprintf("choices={[%s]}", paste(items, collapse = ", ")))
   }
 
-  # Binding — depends on input type
+  # Binding -- depends on input type
   if (type == "action") {
     # Action buttons: onclick increments counter, no value binding
     props <- c(props, sprintf("onclick={() => %s++}", id))
     # Add disabled prop if requires is specified
-    if (!is.null(args$requires)) {
+    if (!is.null(args[["requires"]])) {
       props <- c(props, sprintf("disabled={!%s_valid}", id))
     }
   } else if (type %in% c("search_results_panel", "multi_view_panel")) {
-    # No value binding — display-only components driven by props
+    # No value binding -- display-only components driven by props
   } else {
     binding <- switch(type,
       checkbox = sprintf("bind:checked={%s}", id),
@@ -198,13 +198,13 @@
 
   # Pass help text as a prop for components that support inline help icons.
   # When alt_help + alt_when are provided, emit a reactive prop expression.
-  help_text <- input_def$args$help
+  help_text <- input_def[["args"]][["help"]]
   types_with_help_prop <- c("numeric", "numeric_with_unit", "select")
   if (!is.null(help_text) && type %in% types_with_help_prop) {
     safe_help <- gsub('"', '&quot;', help_text)
-    if (!is.null(args$alt_help) && !is.null(args$alt_when)) {
-      cond <- .show_when_condition(args$alt_when)
-      safe_alt <- gsub('"', '&quot;', args$alt_help)
+    if (!is.null(args[["alt_help"]]) && !is.null(args[["alt_when"]])) {
+      cond <- .show_when_condition(args[["alt_when"]])
+      safe_alt <- gsub('"', '&quot;', args[["alt_help"]])
       props <- c(props, sprintf('help={(%s) ? "%s" : "%s"}', cond, safe_alt, safe_help))
     } else {
       props <- c(props, sprintf('help="%s"', safe_help))
@@ -218,9 +218,9 @@
   # the help prop. The text becomes a Svelte expression when alt_help is set.
   if (!is.null(help_text)) {
     safe_help <- gsub('"', '&quot;', help_text)
-    help_html <- if (!is.null(args$alt_help) && !is.null(args$alt_when)) {
-      cond <- .show_when_condition(args$alt_when)
-      safe_alt <- gsub('"', '&quot;', args$alt_help)
+    help_html <- if (!is.null(args[["alt_help"]]) && !is.null(args[["alt_when"]])) {
+      cond <- .show_when_condition(args[["alt_when"]])
+      safe_alt <- gsub('"', '&quot;', args[["alt_help"]])
       sprintf('{(%s) ? "%s" : "%s"}', cond, safe_alt, safe_help)
     } else {
       safe_help
@@ -231,7 +231,7 @@
   }
 
   # Wrap in {#if} block if show_when is specified
-  show_when <- input_def$args$show_when
+  show_when <- input_def[["args"]][["show_when"]]
   if (!is.null(show_when)) {
     tag <- sprintf("    {#if %s}\n  %s\n    {/if}", .show_when_condition(show_when), tag)
   }
@@ -242,10 +242,11 @@
 #' Generate Svelte markup for a single output
 #' @noRd
 .generate_output_markup <- function(output_def, port) {
-  id <- output_def$id
-  type <- output_def$type
-  depends_on <- output_def$depends_on
-  trigger <- output_def$trigger
+  id <- output_def[["id"]]
+  type <- output_def[["type"]]
+  depends_on <- output_def[["depends_on"]]
+  trigger <- output_def[["trigger"]]
+  refresh_event <- output_def[["refresh_event"]]
   component <- .output_component_name(type)
 
   endpoint <- sprintf("/api/output/%s", id)
@@ -259,22 +260,30 @@
     trigger_prop <- sprintf(" trigger={%s}", trigger)
   }
 
-  sprintf('    <%s id="%s" endpoint="%s" params={{ %s }}%s />',
-    component, id, endpoint, params_obj, trigger_prop)
+  # fetch_section optionally re-fetches when a named DOM event fires --
+  # forwarded to HtmlOutput's refreshEvent prop. Plain HtmlOutput supports
+  # this too (existing prop on the Svelte component).
+  refresh_prop <- ""
+  if (!is.null(refresh_event)) {
+    refresh_prop <- sprintf(' refreshEvent="%s"', refresh_event)
+  }
+
+  sprintf('    <%s id="%s" endpoint="%s" params={{ %s }}%s%s />',
+    component, id, endpoint, params_obj, trigger_prop, refresh_prop)
 }
 
 #' Generate the content area (empty state + outputs with conditional display)
 #' @noRd
 .generate_content_html <- function(outputs, port, empty_state, scenarios = list()) {
   output_markup <- vapply(outputs, function(o) .generate_output_markup(o, port), character(1))
-  has_triggers <- any(vapply(outputs, function(o) !is.null(o$trigger), logical(1)))
+  has_triggers <- any(vapply(outputs, function(o) !is.null(o[["trigger"]]), logical(1)))
 
   # Generate scenario buttons HTML
   scenario_html <- ""
   if (length(scenarios) > 0) {
     buttons <- vapply(seq_along(scenarios), function(i) {
       sprintf('        <button class="scenario-button" onclick={loadScenario%d}>%s</button>',
-        i, scenarios[[i]]$label)
+        i, scenarios[[i]][["label"]])
     }, character(1))
     scenario_html <- sprintf(
       '\n      <div class="scenario-buttons">\n%s\n      </div>',
@@ -284,8 +293,8 @@
   if (has_triggers && !is.null(empty_state)) {
     empty_html <- sprintf(
       '    {#if !showResults}\n    <div class="empty-state">\n      <h2>%s</h2>%s%s\n    </div>\n    {/if}',
-      empty_state$title,
-      if (!is.null(empty_state$subtitle)) sprintf("\n      <p>%s</p>", empty_state$subtitle) else "",
+      empty_state[["title"]],
+      if (!is.null(empty_state[["subtitle"]])) sprintf("\n      <p>%s</p>", empty_state[["subtitle"]]) else "",
       scenario_html
     )
     sprintf('%s\n    {#if showResults}\n%s\n    {/if}',
@@ -302,26 +311,26 @@
 #' @noRd
 .generate_section_markup <- function(section_def, inputs) {
   # Generate markup for each input in the section
-  section_inputs <- inputs[section_def$inputs]
+  section_inputs <- inputs[section_def[["inputs"]]]
   input_tags <- vapply(section_inputs, .generate_input_markup, character(1))
   inner <- paste(input_tags, collapse = "\n")
 
   # Add section heading if label is set
-  if (!is.null(section_def$label)) {
-    inner <- sprintf('    <h4 class="section-label">%s</h4>\n%s', section_def$label, inner)
+  if (!is.null(section_def[["label"]])) {
+    inner <- sprintf('    <h4 class="section-label">%s</h4>\n%s', section_def[["label"]], inner)
   }
 
   # Wrap in a div with section class
-  block <- sprintf('    <div class="section" data-section-id="%s">\n%s\n    </div>', section_def$id, inner)
+  block <- sprintf('    <div class="section" data-section-id="%s">\n%s\n    </div>', section_def[["id"]], inner)
 
   # Wrap in {#if} for show_after (trigger-gated)
-  if (!is.null(section_def$show_after)) {
-    block <- sprintf("    {#if %s > 0}\n%s\n    {/if}", section_def$show_after, block)
+  if (!is.null(section_def[["show_after"]])) {
+    block <- sprintf("    {#if %s > 0}\n%s\n    {/if}", section_def[["show_after"]], block)
   }
 
   # Wrap in {#if} for show_when (input-gated)
-  if (!is.null(section_def$show_when)) {
-    block <- sprintf("    {#if %s}\n%s\n    {/if}", .show_when_condition(section_def$show_when), block)
+  if (!is.null(section_def[["show_when"]])) {
+    block <- sprintf("    {#if %s}\n%s\n    {/if}", .show_when_condition(section_def[["show_when"]]), block)
   }
 
   block
@@ -335,7 +344,7 @@
 #' "html" → HtmlOutput, "plot" → PlotOutput.
 #' @noRd
 .generate_module_output_markup <- function(mod_output) {
-  type <- mod_output$type
+  type <- mod_output[["type"]]
   switch(type,
     table = .generate_module_table_markup(mod_output),
     stats = .generate_module_stats_markup(mod_output),
@@ -349,14 +358,14 @@
 #' Generate DataTable markup from module output declaration.
 #' @noRd
 .generate_module_table_markup <- function(mod_output) {
-  id <- mod_output$id
-  endpoint <- mod_output$endpoint
-  columns <- mod_output$columns
-  page_size <- mod_output$page_size %||% 0
-  searchable <- isTRUE(mod_output$searchable)
-  selectable <- isTRUE(mod_output$selectable)
-  on_select <- mod_output$on_select
-  filters <- mod_output$filters
+  id <- mod_output[["id"]]
+  endpoint <- mod_output[["endpoint"]]
+  columns <- mod_output[["columns"]]
+  page_size <- mod_output[["page_size"]] %||% 0
+  searchable <- isTRUE(mod_output[["searchable"]])
+  selectable <- isTRUE(mod_output[["selectable"]])
+  on_select <- mod_output[["on_select"]]
+  filters <- mod_output[["filters"]]
 
   safe_id <- gsub("[/]", "_", id)
 
@@ -381,13 +390,13 @@
   }
 
   # Event-driven refresh (e.g., after form modal submit)
-  if (!is.null(mod_output$refresh_on)) {
-    props <- c(props, sprintf('refreshEvent="%s"', mod_output$refresh_on))
+  if (!is.null(mod_output[["refresh_on"]])) {
+    props <- c(props, sprintf('refreshEvent="%s"', mod_output[["refresh_on"]]))
   }
 
   # User-supplied CSS class
-  if (!is.null(mod_output$class)) {
-    props <- c(props, sprintf('class="%s"', mod_output$class))
+  if (!is.null(mod_output[["class"]])) {
+    props <- c(props, sprintf('class="%s"', mod_output[["class"]]))
   }
 
   table_tag <- sprintf("<DataTable %s />", paste(props, collapse = "\n      "))
@@ -395,30 +404,30 @@
   # If filters are defined, wrap with a filter bar above the table
   if (!is.null(filters) && length(filters) > 0) {
     filter_chips <- vapply(filters, function(f) {
-      filter_var <- paste0(safe_id, "_filter_", f$id)
+      filter_var <- paste0(safe_id, "_filter_", f[["id"]])
       # Build dropdown items from choices
-      if (!is.null(names(f$choices))) {
-        items <- vapply(seq_along(f$choices), function(i) {
-          val <- f$choices[[i]]
-          lab <- names(f$choices)[[i]]
+      if (!is.null(names(f[["choices"]]))) {
+        items <- vapply(seq_along(f[["choices"]]), function(i) {
+          val <- f[["choices"]][[i]]
+          lab <- names(f[["choices"]])[[i]]
           sprintf('              <button class="filter-chip-item" class:active={%s === "%s"} onclick={() => { %s = "%s"; %s_open = false }}>%s</button>',
             filter_var, val, filter_var, val, filter_var, lab)
         }, character(1))
-        first_label <- names(f$choices)[[1]]
+        first_label <- names(f[["choices"]])[[1]]
       } else {
-        items <- vapply(f$choices, function(c) {
+        items <- vapply(f[["choices"]], function(c) {
           sprintf('              <button class="filter-chip-item" class:active={%s === "%s"} onclick={() => { %s = "%s"; %s_open = false }}>%s</button>',
             filter_var, c, filter_var, c, filter_var, c)
         }, character(1))
-        first_label <- f$choices[[1]]
+        first_label <- f[["choices"]][[1]]
       }
       # Build label lookup for display
-      if (!is.null(names(f$choices))) {
-        lookup_entries <- vapply(seq_along(f$choices), function(i) {
-          sprintf('"%s": "%s"', f$choices[[i]], names(f$choices)[[i]])
+      if (!is.null(names(f[["choices"]]))) {
+        lookup_entries <- vapply(seq_along(f[["choices"]]), function(i) {
+          sprintf('"%s": "%s"', f[["choices"]][[i]], names(f[["choices"]])[[i]])
         }, character(1))
       } else {
-        lookup_entries <- vapply(f$choices, function(c) {
+        lookup_entries <- vapply(f[["choices"]], function(c) {
           sprintf('"%s": "%s"', c, c)
         }, character(1))
       }
@@ -437,7 +446,7 @@
           {/if}
         </div>',
         filter_var, filter_var, filter_var,
-        f$label, display_expr,
+        f[["label"]], display_expr,
         filter_var,
         paste(items, collapse = "\n"))
     }, character(1))
@@ -453,8 +462,8 @@
 #' Generate CardGrid markup from module output declaration.
 #' @noRd
 .generate_module_cards_markup <- function(mod_output) {
-  id <- mod_output$id
-  endpoint <- mod_output$endpoint
+  id <- mod_output[["id"]]
+  endpoint <- mod_output[["endpoint"]]
   safe_id <- gsub("[/]", "_", id)
 
   card_var <- paste0(safe_id, "_card")
@@ -466,71 +475,71 @@
   )
 
   # Rich fields
-  card_def <- mod_output$card %||% list()
-  if (!is.null(card_def$fields) && length(card_def$fields) > 0) {
+  card_def <- mod_output[["card"]] %||% list()
+  if (!is.null(card_def[["fields"]]) && length(card_def[["fields"]]) > 0) {
     fields_var <- paste0(safe_id, "_fields")
     props <- c(props, sprintf("fields={%s}", fields_var))
   }
 
   # Filters
-  if (!is.null(mod_output$filters) && length(mod_output$filters) > 0) {
+  if (!is.null(mod_output[["filters"]]) && length(mod_output[["filters"]]) > 0) {
     filters_var <- paste0(safe_id, "_filters")
     props <- c(props, sprintf("filters={%s}", filters_var))
   }
 
   # Group-by (collapsible groupings)
-  if (!is.null(mod_output$group_by)) {
+  if (!is.null(mod_output[["group_by"]])) {
     gb_var <- paste0(safe_id, "_group_by")
     props <- c(props, sprintf("groupBy={%s}", gb_var))
   }
 
   # Searchable
-  if (isTRUE(mod_output$searchable)) {
+  if (isTRUE(mod_output[["searchable"]])) {
     props <- c(props, "searchable={true}")
   }
 
   # Page size
-  if (!is.null(mod_output$page_size)) {
-    props <- c(props, sprintf("pageSize={%d}", as.integer(mod_output$page_size)))
+  if (!is.null(mod_output[["page_size"]])) {
+    props <- c(props, sprintf("pageSize={%d}", as.integer(mod_output[["page_size"]])))
   }
 
   # Min card width
-  if (!is.null(mod_output$min_width)) {
-    props <- c(props, sprintf("minWidth={%d}", as.integer(mod_output$min_width)))
+  if (!is.null(mod_output[["min_width"]])) {
+    props <- c(props, sprintf("minWidth={%d}", as.integer(mod_output[["min_width"]])))
   }
 
   # Favorite
-  if (!is.null(mod_output$favorite)) {
+  if (!is.null(mod_output[["favorite"]])) {
     fav_var <- paste0(safe_id, "_favorite")
     props <- c(props, sprintf("favorite={%s}", fav_var))
   }
 
   # Click handler
-  if (!is.null(mod_output$on_click)) {
+  if (!is.null(mod_output[["on_click"]])) {
     handler_name <- paste0(safe_id, "_onclick")
     props <- c(props, sprintf("onclick={%s}", handler_name))
   }
 
   # Event-driven refresh
-  if (!is.null(mod_output$refresh_on)) {
-    props <- c(props, sprintf('refreshEvent="%s"', mod_output$refresh_on))
+  if (!is.null(mod_output[["refresh_on"]])) {
+    props <- c(props, sprintf('refreshEvent="%s"', mod_output[["refresh_on"]]))
   }
 
   # Contact action (dispatches event on mailto/tel click)
-  if (!is.null(mod_output$contact_action)) {
+  if (!is.null(mod_output[["contact_action"]])) {
     ca_var <- paste0(safe_id, "_contact_action")
     props <- c(props, sprintf("contactAction={%s}", ca_var))
   }
 
   # Labels (i18n)
-  if (!is.null(mod_output$labels)) {
+  if (!is.null(mod_output[["labels"]])) {
     labels_var <- paste0(safe_id, "_labels")
     props <- c(props, sprintf("labels={%s}", labels_var))
   }
 
   # User-supplied CSS class
-  if (!is.null(mod_output$class)) {
-    props <- c(props, sprintf('class="%s"', mod_output$class))
+  if (!is.null(mod_output[["class"]])) {
+    props <- c(props, sprintf('class="%s"', mod_output[["class"]]))
   }
 
   sprintf("    <CardGrid %s />", paste(props, collapse = "\n      "))
@@ -539,33 +548,33 @@
 #' Generate StatCards markup from module output declaration.
 #' @noRd
 .generate_module_stats_markup <- function(mod_output) {
-  id <- mod_output$id
-  endpoint <- mod_output$endpoint
+  id <- mod_output[["id"]]
+  endpoint <- mod_output[["endpoint"]]
 
   # Generate card definitions as JS variable name
   cards_var <- gsub("[/]", "_", id)
   cards_var <- paste0(cards_var, "_cards")
 
-  class_prop <- if (!is.null(mod_output$class)) sprintf(' class="%s"', mod_output$class) else ""
+  class_prop <- if (!is.null(mod_output[["class"]])) sprintf(' class="%s"', mod_output[["class"]]) else ""
   sprintf('    <StatCards endpoint="%s" cards={%s}%s />', endpoint, cards_var, class_prop)
 }
 
 #' Generate HtmlOutput markup from module output declaration.
 #' @noRd
 .generate_module_html_markup <- function(mod_output) {
-  endpoint <- mod_output$endpoint %||% sprintf("/api/output/%s", mod_output$id)
-  safe_id <- gsub("[/]", "_", mod_output$full_id %||% mod_output$id)
+  endpoint <- mod_output[["endpoint"]] %||% sprintf("/api/output/%s", mod_output[["id"]])
+  safe_id <- gsub("[/]", "_", mod_output[["full_id"]] %||% mod_output[["id"]])
   extra <- sprintf(' id="%s"', safe_id)
-  if (!is.null(mod_output$class)) extra <- paste0(extra, sprintf(' class="%s"', mod_output$class))
-  if (!is.null(mod_output$refresh_on)) extra <- paste0(extra, sprintf(' refreshEvent="%s"', mod_output$refresh_on))
+  if (!is.null(mod_output[["class"]])) extra <- paste0(extra, sprintf(' class="%s"', mod_output[["class"]]))
+  if (!is.null(mod_output[["refresh_on"]])) extra <- paste0(extra, sprintf(' refreshEvent="%s"', mod_output[["refresh_on"]]))
   sprintf('    <HtmlOutput endpoint="%s"%s />', endpoint, extra)
 }
 
 #' Generate PlotOutput markup from module output declaration.
 #' @noRd
 .generate_module_plot_markup <- function(mod_output) {
-  endpoint <- mod_output$endpoint %||% sprintf("/api/output/%s", mod_output$id)
-  class_prop <- if (!is.null(mod_output$class)) sprintf(' class="%s"', mod_output$class) else ""
+  endpoint <- mod_output[["endpoint"]] %||% sprintf("/api/output/%s", mod_output[["id"]])
+  class_prop <- if (!is.null(mod_output[["class"]])) sprintf(' class="%s"', mod_output[["class"]]) else ""
   sprintf('    <PlotOutput endpoint="%s"%s />', endpoint, class_prop)
 }
 
@@ -577,7 +586,7 @@
 #' @noRd
 .generate_sidebar_inputs <- function(inputs, sections) {
   # Find which inputs belong to sections
-  sectioned_ids <- unlist(lapply(sections, function(s) s$inputs))
+  sectioned_ids <- unlist(lapply(sections, function(s) s[["inputs"]]))
 
   # Render unsectioned inputs in declaration order
   unsectioned <- inputs[!names(inputs) %in% sectioned_ids]

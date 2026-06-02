@@ -1,0 +1,137 @@
+---
+title: "Theming an ambolt app"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Theming an ambolt app}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+ambolt's theming has three layers, in order of preference:
+
+1. **Design tokens** (`tokens = ...`) — semantic, nested key/value tree. The 0.2 API. Start here.
+2. **Legacy short forms** (`colors = ...`, `radius = ...`, `components = ...`, `fonts = ...`) — flat name-keyed lists kept for backward compatibility with 0.1 apps.
+3. **Raw CSS** (`css = ...`, `css_file = ...`) — last word, for app-specific tweaks that don't belong in the design system.
+
+Later layers override earlier ones, so an app that sets a token *and* later writes raw CSS for the same property will see the raw CSS.
+
+## Design tokens
+
+`app$theme(tokens = ...)` accepts a nested list with these top-level categories:
+
+- `color` — semantic surface, text, and brand palette
+- `font` — family, sizing, weight
+- `radius` — corner radii (sm / md / lg or arbitrary)
+- `space` — spacing scale (sm / md / lg / unit, or arbitrary)
+- `shadow` — elevation tokens (sm / md / lg)
+
+A minimal call:
+
+```r
+app$theme(tokens = list(
+  color = list(
+    primary = "#1a73e8",
+    surface = "#ffffff",
+    text    = "#202124"
+  )
+))
+```
+
+Generates CSS variables on `:root`:
+
+```css
+:root {
+  --ambolt-color-primary: #1a73e8;
+  --ambolt-color-primary-hover: color-mix(in srgb, var(--ambolt-color-primary) 85%, black);
+  --ambolt-color-primary-muted: color-mix(in srgb, var(--ambolt-color-primary) 30%, white);
+  --ambolt-color-primary-focus: color-mix(in srgb, var(--ambolt-color-primary) 40%, transparent);
+  --ambolt-color-surface:    #ffffff;
+  --ambolt-color-text:       #202124;
+  /* + auto-derived hover/muted/focus for surface and text */
+}
+
+body {
+  color: var(--ambolt-color-text);
+  background: var(--ambolt-color-surface);
+}
+```
+
+### Color: the 12-key palette
+
+ambolt recognises this color vocabulary; setting any key auto-derives the `_hover` / `_muted` / `_focus` variant unless you set it explicitly:
+
+| Key            | Used for                                                |
+|----------------|---------------------------------------------------------|
+| `primary`      | Primary buttons, focus rings, links                     |
+| `secondary`    | Secondary buttons, less prominent calls-to-action       |
+| `surface`      | Card/panel/modal background                             |
+| `surface_alt`  | Striped table row, hover background, subtle panels      |
+| `text`         | Body text                                               |
+| `text_muted`   | Captions, subtitles, helper text                        |
+| `border`       | Card border, table border, input border                 |
+| `success`      | Success badges, "saved" indicators                      |
+| `warning`      | Warning badges, "unsaved changes" indicators            |
+| `danger`       | Error states, destructive actions                       |
+| `accent`       | Secondary brand accent (occasional emphasis)            |
+| `*_hover/_muted/_focus` | Auto-derived from base unless you override     |
+
+### Font
+
+```r
+app$theme(tokens = list(font = list(
+  family        = "Inter, system-ui, sans-serif",
+  family_mono   = "JetBrains Mono, ui-monospace, monospace",
+  size_base     = "16px",
+  scale_ratio   = 1.25,
+  line_height   = 1.5,
+  weight        = list(regular = 400, medium = 500, bold = 700)
+)))
+```
+
+`family`, `size_base`, and `line_height` also cascade into a global `body { ... }` rule when set. `family_mono`, `scale_ratio`, and `weight.*` produce variables only — components that want them reference `var(--ambolt-font-family-mono)` etc.
+
+### Radius, space, shadow
+
+These three categories accept arbitrary key names. The conventional scale is `sm` / `md` / `lg`, but you can add e.g. `xs` or `xl` and the framework will emit `--ambolt-radius-xs` / `-xl`.
+
+```r
+app$theme(tokens = list(
+  radius = list(sm = "4px", md = "8px", lg = "16px"),
+  space  = list(unit = "0.5rem", sm = "0.5rem", md = "1rem", lg = "1.5rem"),
+  shadow = list(
+    sm = "0 1px 2px rgba(0,0,0,0.06)",
+    md = "0 2px 8px rgba(0,0,0,0.10)",
+    lg = "0 8px 24px rgba(0,0,0,0.14)"
+  )
+))
+```
+
+## Additive behaviour
+
+Successive calls to `app$theme(tokens = ...)` **deep-merge** into the existing token tree — they do not replace. A second call that sets `color.text` does not zero out a previously-set `color.primary`:
+
+```r
+app$theme(tokens = list(color = list(primary = "#1a73e8")))
+app$theme(tokens = list(color = list(text    = "#202124")))
+## ⇒ both primary and text are set
+```
+
+This makes it possible to layer per-feature theme adjustments (e.g. one module sets palette, another sets typography) without each call having to restate every token.
+
+## Legacy short forms
+
+The 0.1 arguments `colors`, `radius`, `components`, and `fonts` still work and generate CSS variables alongside design tokens. New apps should prefer `tokens =`; existing apps can migrate gradually. The cascade order is:
+
+```
+design tokens  →  legacy colors/radius/components  →  page-style CSS  →  raw css =
+```
+
+Later wins — a `colors = list(primary = "red")` legacy call will override a `tokens = list(color = list(primary = "blue"))` design-token call.
+
+## When to drop down to raw CSS
+
+The token system handles colors, typography, and spacing. App-specific structural CSS — for example, a custom layout for a particular tab — should still go in `css = ...` or a `.css` file passed via `css_file = ...`. Use tokens for design *consistency*; use raw CSS for app *individuality*.

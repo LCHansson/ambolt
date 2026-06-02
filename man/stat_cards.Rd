@@ -29,8 +29,8 @@ A layout node (named list with \code{type = "stat_cards"}).
 }
 \description{
 Two forms:
-\code{stat_cards("module/output")} — reference a module output (page context)
-\code{stat_cards(endpoint = "/api/...", cards = list(...))} — inline config (modal context)
+\code{stat_cards("module/output")} -- reference a module output (page context)
+\code{stat_cards(endpoint = "/api/...", cards = list(...))} -- inline config (modal context)
 }
 \examples{
 # Inline form (modal context)

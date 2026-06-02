@@ -38,7 +38,7 @@ html_escape <- function(text) {
 #'
 #' Creates a button that triggers a fetch request when clicked.
 #' Uses data-ambolt-* attributes processed by the declarative action handler
-#' in Modal.svelte. No inline JS — all behavior is driven by data attributes.
+#' in Modal.svelte. No inline JS -- all behavior is driven by data attributes.
 #'
 #' @param label Button text (will be HTML-escaped)
 #' @param endpoint API endpoint to call (must start with /api/)
@@ -177,7 +177,7 @@ badge <- function(text, class = NULL, data_value = NULL, style = list()) {
 #' Generate a label-value detail row
 #'
 #' @param label Row label (bold)
-#' @param value Row value (can contain HTML — not escaped)
+#' @param value Row value (can contain HTML -- not escaped)
 #' @return HTML string
 #' @export
 detail_row <- function(label, value) {

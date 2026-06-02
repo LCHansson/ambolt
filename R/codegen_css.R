@@ -27,6 +27,137 @@
   sprintf("\n  :root {\n%s\n  }", paste(lines, collapse = "\n"))
 }
 
+#' Generate :root CSS from the nested design-token tree.
+#'
+#' Walks `tokens` (a nested named list -- see `R/app.R` `app_env$theme`'s
+#' `tokens =` argument and `vignettes/theming.Rmd`) and emits `--ambolt-...`
+#' variables. The tree is **additive**: only paths the user actually set
+#' produce variables; unset paths fall through to component scoped defaults.
+#'
+#' Recognised top-level categories:
+#'   - color: { primary, primary_hover?, secondary, surface, surface_alt,
+#'              text, text_muted, border, success, warning, danger, accent }
+#'   - font:  { family, family_mono, size_base, scale_ratio, line_height,
+#'              weight = { regular, medium, bold } }
+#'   - radius: { sm, md, lg } -- also accepts arbitrary keys
+#'   - space:  { unit, sm, md, lg } -- also accepts arbitrary keys
+#'   - shadow: { sm, md, lg }
+#'
+#' Color auto-derive: when `color.primary` is set but `color.primary_hover`
+#' / `_muted` / `_focus` are unset, the variants are derived at CSS runtime
+#' via `color-mix(in srgb, var(--ambolt-color-primary) X%, Y)`. Same for
+#' any other base color. Explicit values always win.
+#'
+#' Returns: a single CSS block as a character scalar (possibly empty), e.g.
+#'   ":root { --ambolt-color-primary: #1a73e8; ... }
+#'    body { font-family: var(--ambolt-font-family); ... }"
+#' @noRd
+.generate_design_tokens_block <- function(tokens) {
+  if (is.null(tokens) || length(tokens) == 0) return("")
+  root_vars <- character(0)
+  global_rules <- character(0)
+
+  ## ----- color -----
+  color <- tokens[["color"]]
+  if (is.list(color) && length(color) > 0) {
+    base_color_names <- c("primary", "secondary", "surface", "surface_alt",
+                          "text", "text_muted", "border", "success",
+                          "warning", "danger", "accent")
+    for (name in names(color)) {
+      val <- color[[name]]
+      if (is.null(val)) next
+      css_name <- gsub("_", "-", name, fixed = TRUE)
+      root_vars <- c(root_vars,
+        sprintf("    --ambolt-color-%s: %s;", css_name, val))
+    }
+    # Auto-derive hover/muted/focus when base set but variant absent.
+    for (base in base_color_names) {
+      if (is.null(color[[base]])) next
+      css_base <- gsub("_", "-", base, fixed = TRUE)
+      for (variant in c("hover", "muted", "focus")) {
+        full_key <- paste0(base, "_", variant)
+        if (is.null(color[[full_key]])) {
+          mix <- switch(variant,
+            hover = sprintf("color-mix(in srgb, var(--ambolt-color-%s) 85%%, black)", css_base),
+            muted = sprintf("color-mix(in srgb, var(--ambolt-color-%s) 30%%, white)", css_base),
+            focus = sprintf("color-mix(in srgb, var(--ambolt-color-%s) 40%%, transparent)", css_base)
+          )
+          root_vars <- c(root_vars,
+            sprintf("    --ambolt-color-%s-%s: %s;", css_base, variant, mix))
+        }
+      }
+    }
+  }
+
+  ## ----- font -----
+  font <- tokens[["font"]]
+  if (is.list(font) && length(font) > 0) {
+    for (name in c("family", "family_mono", "size_base", "scale_ratio", "line_height")) {
+      val <- font[[name]]
+      if (is.null(val)) next
+      css_name <- gsub("_", "-", name, fixed = TRUE)
+      root_vars <- c(root_vars,
+        sprintf("    --ambolt-font-%s: %s;", css_name, val))
+    }
+    weight <- font[["weight"]]
+    if (is.list(weight)) {
+      for (wname in names(weight)) {
+        if (is.null(weight[[wname]])) next
+        root_vars <- c(root_vars,
+          sprintf("    --ambolt-font-weight-%s: %s;",
+            gsub("_", "-", wname, fixed = TRUE), weight[[wname]]))
+      }
+    }
+    # Global body rules -- only emit when the user set a relevant token
+    body_parts <- character(0)
+    if (!is.null(font[["family"]]))
+      body_parts <- c(body_parts, "  font-family: var(--ambolt-font-family);")
+    if (!is.null(font[["size_base"]]))
+      body_parts <- c(body_parts, "  font-size: var(--ambolt-font-size-base);")
+    if (!is.null(font[["line_height"]]))
+      body_parts <- c(body_parts, "  line-height: var(--ambolt-font-line-height);")
+    if (length(body_parts) > 0) {
+      global_rules <- c(global_rules,
+        sprintf("\n  body {\n%s\n  -webkit-font-smoothing: antialiased;\n  }",
+          paste(body_parts, collapse = "\n")))
+    }
+  }
+
+  ## ----- radius / space / shadow (flat, arbitrary keys) -----
+  for (cat in c("radius", "space", "shadow")) {
+    entries <- tokens[[cat]]
+    if (!is.list(entries) || length(entries) == 0) next
+    for (name in names(entries)) {
+      val <- entries[[name]]
+      if (is.null(val)) next
+      css_name <- gsub("_", "-", name, fixed = TRUE)
+      root_vars <- c(root_vars,
+        sprintf("    --ambolt-%s-%s: %s;", cat, css_name, val))
+    }
+  }
+
+  ## ----- color text/surface global body cascade -----
+  if (is.list(color)) {
+    body_parts <- character(0)
+    if (!is.null(color[["text"]]))
+      body_parts <- c(body_parts, "  color: var(--ambolt-color-text);")
+    if (!is.null(color[["surface"]]))
+      body_parts <- c(body_parts, "  background: var(--ambolt-color-surface);")
+    if (length(body_parts) > 0) {
+      global_rules <- c(global_rules,
+        sprintf("\n  body {\n%s\n  }", paste(body_parts, collapse = "\n")))
+    }
+  }
+
+  parts <- character(0)
+  if (length(root_vars) > 0)
+    parts <- c(parts, sprintf("  :root {\n%s\n  }", paste(root_vars, collapse = "\n")))
+  if (length(global_rules) > 0)
+    parts <- c(parts, global_rules)
+
+  paste(parts, collapse = "\n")
+}
+
 #' Generate CSS from full theme token specification
 #'
 #' Generates :root CSS variables from structured theme tokens (fonts, radius,
@@ -41,13 +172,13 @@
   # Font tokens → variables + global element rules
   fonts <- theme_env$.theme_font_config
   if (!is.null(fonts) && is.list(fonts)) {
-    if (!is.null(fonts$body))
-      root_vars <- c(root_vars, sprintf("    --ambolt-font: %s;", fonts$body))
-    if (!is.null(fonts$heading))
-      root_vars <- c(root_vars, sprintf("    --ambolt-heading-font: %s;", fonts$heading))
+    if (!is.null(fonts[["body"]]))
+      root_vars <- c(root_vars, sprintf("    --ambolt-font: %s;", fonts[["body"]]))
+    if (!is.null(fonts[["heading"]]))
+      root_vars <- c(root_vars, sprintf("    --ambolt-heading-font: %s;", fonts[["heading"]]))
 
     # Global element rules (not scoped, so these cascade properly)
-    if (!is.null(fonts$heading)) {
+    if (!is.null(fonts[["heading"]])) {
       css_rules <- c(css_rules, '
   h1, h2, h3, h4, h5, h6,
   .ambolt-page-title, .ambolt-nav-header, .card-title, .ambolt-modal-header {
@@ -73,55 +204,55 @@
   comps <- theme_env$.theme_components
   if (!is.null(comps) && is.list(comps)) {
     # Nav sidebar
-    nav <- comps$nav
+    nav <- comps[["nav"]]
     if (!is.null(nav)) {
-      if (!is.null(nav$bg)) root_vars <- c(root_vars, sprintf("    --ambolt-nav-bg: %s;", nav$bg))
-      if (!is.null(nav$color)) root_vars <- c(root_vars, sprintf("    --ambolt-nav-color: %s;", nav$color))
-      if (!is.null(nav$active_bg)) root_vars <- c(root_vars, sprintf("    --ambolt-nav-active-bg: %s;", nav$active_bg))
-      if (!is.null(nav$hover_bg)) root_vars <- c(root_vars, sprintf("    --ambolt-nav-hover-bg: %s;", nav$hover_bg))
-      if (!is.null(nav$border)) root_vars <- c(root_vars, sprintf("    --ambolt-nav-border: %s;", nav$border))
+      if (!is.null(nav[["bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-nav-bg: %s;", nav[["bg"]]))
+      if (!is.null(nav[["color"]])) root_vars <- c(root_vars, sprintf("    --ambolt-nav-color: %s;", nav[["color"]]))
+      if (!is.null(nav[["active_bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-nav-active-bg: %s;", nav[["active_bg"]]))
+      if (!is.null(nav[["hover_bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-nav-hover-bg: %s;", nav[["hover_bg"]]))
+      if (!is.null(nav[["border"]])) root_vars <- c(root_vars, sprintf("    --ambolt-nav-border: %s;", nav[["border"]]))
     }
 
     # Table
-    tbl <- comps$table
+    tbl <- comps[["table"]]
     if (!is.null(tbl)) {
-      if (!is.null(tbl$header_bg)) root_vars <- c(root_vars, sprintf("    --ambolt-table-header-bg: %s;", tbl$header_bg))
-      if (!is.null(tbl$stripe_bg)) root_vars <- c(root_vars, sprintf("    --ambolt-table-stripe-bg: %s;", tbl$stripe_bg))
-      if (!is.null(tbl$border_color)) root_vars <- c(root_vars, sprintf("    --ambolt-table-border: %s;", tbl$border_color))
-      if (!is.null(tbl$hover_bg)) root_vars <- c(root_vars, sprintf("    --ambolt-table-hover-bg: %s;", tbl$hover_bg))
-      if (!is.null(tbl$outer_border)) root_vars <- c(root_vars, sprintf("    --ambolt-table-outer-border: %s;", tbl$outer_border))
-      if (!is.null(tbl$bg)) root_vars <- c(root_vars, sprintf("    --ambolt-table-bg: %s;", tbl$bg))
-      if (!is.null(tbl$cell_border)) root_vars <- c(root_vars, sprintf("    --ambolt-table-cell-border: %s;", tbl$cell_border))
-      if (!is.null(tbl$th_weight)) root_vars <- c(root_vars, sprintf("    --ambolt-table-th-weight: %s;", tbl$th_weight))
+      if (!is.null(tbl[["header_bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-header-bg: %s;", tbl[["header_bg"]]))
+      if (!is.null(tbl[["stripe_bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-stripe-bg: %s;", tbl[["stripe_bg"]]))
+      if (!is.null(tbl[["border_color"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-border: %s;", tbl[["border_color"]]))
+      if (!is.null(tbl[["hover_bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-hover-bg: %s;", tbl[["hover_bg"]]))
+      if (!is.null(tbl[["outer_border"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-outer-border: %s;", tbl[["outer_border"]]))
+      if (!is.null(tbl[["bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-bg: %s;", tbl[["bg"]]))
+      if (!is.null(tbl[["cell_border"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-cell-border: %s;", tbl[["cell_border"]]))
+      if (!is.null(tbl[["th_weight"]])) root_vars <- c(root_vars, sprintf("    --ambolt-table-th-weight: %s;", tbl[["th_weight"]]))
     }
 
     # Badge
-    bdg <- comps$badge
+    bdg <- comps[["badge"]]
     if (!is.null(bdg)) {
-      if (!is.null(bdg$bg)) root_vars <- c(root_vars, sprintf("    --ambolt-badge-bg: %s;", bdg$bg))
-      if (!is.null(bdg$color)) root_vars <- c(root_vars, sprintf("    --ambolt-badge-color: %s;", bdg$color))
-      if (!is.null(bdg$radius)) root_vars <- c(root_vars, sprintf("    --ambolt-badge-radius: %s;", bdg$radius))
-      if (!is.null(bdg$weight)) root_vars <- c(root_vars, sprintf("    --ambolt-badge-weight: %s;", bdg$weight))
+      if (!is.null(bdg[["bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-badge-bg: %s;", bdg[["bg"]]))
+      if (!is.null(bdg[["color"]])) root_vars <- c(root_vars, sprintf("    --ambolt-badge-color: %s;", bdg[["color"]]))
+      if (!is.null(bdg[["radius"]])) root_vars <- c(root_vars, sprintf("    --ambolt-badge-radius: %s;", bdg[["radius"]]))
+      if (!is.null(bdg[["weight"]])) root_vars <- c(root_vars, sprintf("    --ambolt-badge-weight: %s;", bdg[["weight"]]))
     }
 
     # Card
-    crd <- comps$card
+    crd <- comps[["card"]]
     if (!is.null(crd)) {
-      if (!is.null(crd$border)) root_vars <- c(root_vars, sprintf("    --ambolt-card-border: %s;", crd$border))
+      if (!is.null(crd[["border"]])) root_vars <- c(root_vars, sprintf("    --ambolt-card-border: %s;", crd[["border"]]))
     }
 
     # Modal
-    mdl <- comps$modal
+    mdl <- comps[["modal"]]
     if (!is.null(mdl)) {
-      if (!is.null(mdl$radius)) root_vars <- c(root_vars, sprintf("    --ambolt-modal-radius: %s;", mdl$radius))
-      if (!is.null(mdl$shadow)) root_vars <- c(root_vars, sprintf("    --ambolt-modal-shadow: %s;", mdl$shadow))
+      if (!is.null(mdl[["radius"]])) root_vars <- c(root_vars, sprintf("    --ambolt-modal-radius: %s;", mdl[["radius"]]))
+      if (!is.null(mdl[["shadow"]])) root_vars <- c(root_vars, sprintf("    --ambolt-modal-shadow: %s;", mdl[["shadow"]]))
     }
 
     # Button primary
-    btn <- comps$button_primary
+    btn <- comps[["button_primary"]]
     if (!is.null(btn)) {
-      if (!is.null(btn$bg)) root_vars <- c(root_vars, sprintf("    --ambolt-btn-primary-bg: %s;", btn$bg))
-      if (!is.null(btn$hover_bg)) root_vars <- c(root_vars, sprintf("    --ambolt-btn-primary-hover: %s;", btn$hover_bg))
+      if (!is.null(btn[["bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-btn-primary-bg: %s;", btn[["bg"]]))
+      if (!is.null(btn[["hover_bg"]])) root_vars <- c(root_vars, sprintf("    --ambolt-btn-primary-hover: %s;", btn[["hover_bg"]]))
     }
   }
 
@@ -210,7 +341,7 @@
 #' Generate CSS for help tooltips (returns empty string if no inputs have help)
 #' @noRd
 .generate_tooltip_css <- function(inputs) {
-  has_help <- any(vapply(inputs, function(i) !is.null(i$args$help), logical(1)))
+  has_help <- any(vapply(inputs, function(i) !is.null(i[["args"]][["help"]]), logical(1)))
   if (!has_help) return("")
   '
   .input-with-help {

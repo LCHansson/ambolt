@@ -4,10 +4,10 @@
 # that assembles a complete App.svelte from all codegen modules.
 #
 # Depends on:
-#   codegen_script.R — <script> block generation
-#   codegen_markup.R — input/output Svelte markup
-#   codegen_css.R    — CSS generation for framework features
-#   codegen_tree.R   — layout tree walker
+#   codegen_script.R -- <script> block generation
+#   codegen_markup.R -- input/output Svelte markup
+#   codegen_css.R    -- CSS generation for framework features
+#   codegen_tree.R   -- layout tree walker
 
 # --- Layout templates --------------------------------------------
 
@@ -168,8 +168,8 @@
 #' Orchestrates script generation, input/output markup, layout rendering,
 #' and conditional display logic into a complete Svelte component.
 #' Supports two modes:
-#'   1. Layout tree (app$ui()) — walks the tree to place items
-#'   2. Legacy implicit layout — inputs→sidebar, outputs→content
+#'   1. Layout tree (app$ui()) -- walks the tree to place items
+#'   2. Legacy implicit layout -- inputs→sidebar, outputs→content
 #' @noRd
 .generate_app_svelte <- function(app_env) {
   inputs <- app_env$.inputs
@@ -197,19 +197,19 @@
     result <- .generate_from_legacy(app_env)
   }
 
-  markup <- result$markup
+  markup <- result[["markup"]]
 
   # Append Modal component if modals are registered
   has_modals <- length(modals) > 0
   if (!has_modals && !is.null(pages)) {
-    page_scripts <- paste(vapply(pages, function(p) p$script %||% "", character(1)), collapse = "")
+    page_scripts <- paste(vapply(pages, function(p) p[["script"]] %||% "", character(1)), collapse = "")
     has_modals <- grepl("modal\\.", page_scripts, perl = TRUE)
   }
   # Module outputs with on_select/on_click → modal also need Modal
   if (!has_modals && length(module_outputs) > 0) {
     has_modals <- any(vapply(module_outputs, function(mo) {
-      (!is.null(mo$on_select) && !is.null(mo$on_select$modal)) ||
-      (!is.null(mo$on_click) && !is.null(mo$on_click$modal))
+      (!is.null(mo[["on_select"]]) && !is.null(mo[["on_select"]][["modal"]])) ||
+      (!is.null(mo[["on_click"]]) && !is.null(mo[["on_click"]][["modal"]]))
     }, logical(1)))
   }
   if (has_modals) {
@@ -217,21 +217,21 @@
   }
 
   # Append BasketPanel if app uses SearchResultsPanel (basket-enabled)
-  has_basket <- any(vapply(inputs, function(i) i$type == "search_results_panel", logical(1)))
+  has_basket <- any(vapply(inputs, function(i) i[["type"]] == "search_results_panel", logical(1)))
   if (has_basket) {
     markup <- paste0(markup, "\n<BasketPanel />")
   }
 
   # Wrap in AuthGuard if auth is configured
   if (!is.null(auth)) {
-    login_title <- auth$login_title %||% app_env$.meta$title %||% "Logga in"
+    login_title <- auth[["login_title"]] %||% app_env$.meta[["title"]] %||% "Logga in"
     markup <- sprintf('
 <AuthGuard loginTitle="%s">
   {#snippet children()}%s
   {/snippet}
 </AuthGuard>', login_title, markup)
   }
-  head_parts <- result$head_parts %||% character(0)
+  head_parts <- result[["head_parts"]] %||% character(0)
 
   # -- Unified <svelte:head> assembly --
   # All modes contribute to head_parts; theme assets are added here.
@@ -242,14 +242,18 @@
     }, character(1)))
   }
 
-  # Theme colors (CSS variables)
+  # Cascade order (later wins):
+  #   1. Design tokens (`app$theme(tokens = list(color = ...))`) -- 0.2+ API
+  #   2. Theme colors (`app$theme(colors = list(...))`)            -- legacy
+  #   3. Theme component tokens (fonts, radius, components)        -- legacy
+  #   4. Per-route style_css (from layout-mode codegen)
+  #   5. Raw `css = ...` / `css_file = ...`                        -- last word
+  design_tokens_css <- .generate_design_tokens_block(app_env$.theme_tokens)
   colors_css <- .generate_theme_colors_css(theme_colors)
-
-  # Theme tokens (fonts, radius, component overrides)
   tokens_css <- .generate_theme_tokens_css(app_env)
 
-  # Combine all CSS: theme colors + tokens + mode-specific + custom theme CSS
-  all_css <- paste0(colors_css, "\n", tokens_css, result$style_css %||% "")
+  all_css <- paste0(design_tokens_css, "\n", colors_css, "\n", tokens_css,
+                    "\n", result[["style_css"]] %||% "")
   if (!is.null(theme_css)) {
     all_css <- paste0(all_css, "\n", theme_css)
   }
@@ -273,9 +277,9 @@
 #'   - page_content:   full-width stacked layout (can nest sidebar_layout)
 #' @noRd
 .generate_from_tree <- function(ui_tree, inputs, outputs, port, empty_state, scenarios) {
-  stopifnot(ui_tree$type %in% c("sidebar_layout", "page_content"))
+  stopifnot(ui_tree[["type"]] %in% c("sidebar_layout", "page_content"))
 
-  # Always emit DSL primitive CSS — modals can use these at runtime
+  # Always emit DSL primitive CSS -- modals can use these at runtime
   # regardless of what the page tree contains (RenderNode.svelte).
   extra_css <- paste0(
     .generate_empty_state_css(empty_state),
@@ -285,7 +289,7 @@
     .generate_details_css(TRUE)
   )
 
-  if (ui_tree$type == "page_content") {
+  if (ui_tree[["type"]] == "page_content") {
     return(.generate_from_tree_page_content(ui_tree, inputs, outputs, port,
                                             empty_state, scenarios, extra_css))
   }
@@ -298,18 +302,18 @@
   # a single rule on `.sidebar`.
   is_action_child <- function(child) {
     is.character(child) && child %in% names(inputs) &&
-      identical(inputs[[child]]$type, "action")
+      identical(inputs[[child]][["type"]], "action")
   }
   primary_tags <- character(0)
   trailing_tags <- character(0)
-  for (child in ui_tree$sidebar$children) {
+  for (child in ui_tree[["sidebar"]][["children"]]) {
     tag <- .render_tree_node(child, inputs, outputs, port)
     if (is_action_child(child)) {
       button_wrapped <- sprintf("    {#if !showResults}\n%s\n    {/if}", tag)
       if (length(scenarios) > 0) {
         scenario_buttons <- vapply(seq_along(scenarios), function(i) {
           sprintf('        <button class="scenario-button" onclick={loadScenario%d}>%s</button>',
-            i, scenarios[[i]]$label)
+            i, scenarios[[i]][["label"]])
         }, character(1))
         scenario_html <- sprintf(
           '    {#if showResults}\n    <div class="sidebar-scenarios">\n      <p class="sidebar-scenarios-label">Du kan ocks\u00e5 testa ett av f\u00f6ljande scenarier:</p>\n      <div class="scenario-buttons">\n%s\n      </div>\n    </div>\n    {/if}',
@@ -329,7 +333,7 @@
   } else {
     paste(trailing_tags, collapse = "\n")
   }
-  content_items <- .render_tree_children(ui_tree$main$children, inputs, outputs, port)
+  content_items <- .render_tree_children(ui_tree[["main"]][["children"]], inputs, outputs, port)
 
   # Wrap content with empty state / trigger display logic
   content_html <- .wrap_content_with_empty_state(content_items, outputs, empty_state, scenarios)
@@ -344,7 +348,7 @@
 #' @noRd
 .generate_from_tree_page_content <- function(ui_tree, inputs, outputs, port,
                                              empty_state, scenarios, extra_css) {
-  content_items <- .render_tree_children(ui_tree$children, inputs, outputs, port)
+  content_items <- .render_tree_children(ui_tree[["children"]], inputs, outputs, port)
   content_html <- .wrap_content_with_empty_state(content_items, outputs, empty_state, scenarios)
   list(markup = .render_page_content_toplevel(content_html, extra_css))
 }
@@ -376,7 +380,7 @@
     .generate_section_css(length(sections) > 0)
   )
 
-  markup <- if (layout$type == "sidebar") {
+  markup <- if (layout[["type"]] == "sidebar") {
     .render_sidebar_layout(input_markup, content_html, extra_css)
   } else {
     .render_stacked_layout(input_markup, content_html, extra_css)
@@ -392,14 +396,14 @@
 #' content in {#if showResults}.
 #' @noRd
 .wrap_content_with_empty_state <- function(content_items, outputs, empty_state, scenarios) {
-  has_triggers <- any(vapply(outputs, function(o) !is.null(o$trigger), logical(1)))
+  has_triggers <- any(vapply(outputs, function(o) !is.null(o[["trigger"]]), logical(1)))
 
   # Generate scenario buttons HTML
   scenario_html <- ""
   if (length(scenarios) > 0) {
     buttons <- vapply(seq_along(scenarios), function(i) {
       sprintf('        <button class="scenario-button" onclick={loadScenario%d}>%s</button>',
-        i, scenarios[[i]]$label)
+        i, scenarios[[i]][["label"]])
     }, character(1))
     scenario_html <- sprintf(
       '\n      <div class="scenario-buttons">\n%s\n      </div>',
@@ -407,14 +411,14 @@
   }
 
   if (has_triggers && !is.null(empty_state)) {
-    image_html <- if (!is.null(empty_state$image) && nchar(empty_state$image) > 0) {
-      sprintf('\n      <img class="empty-state-image" src="/%s" alt="" />', empty_state$image)
+    image_html <- if (!is.null(empty_state[["image"]]) && nchar(empty_state[["image"]]) > 0) {
+      sprintf('\n      <img class="empty-state-image" src="/%s" alt="" />', empty_state[["image"]])
     } else ""
     empty_html <- sprintf(
       '    {#if !showResults}\n    <div class="empty-state">%s\n      <h2>%s</h2>%s%s\n    </div>\n    {/if}',
       image_html,
-      empty_state$title,
-      if (!is.null(empty_state$subtitle)) sprintf("\n      <p>%s</p>", empty_state$subtitle) else "",
+      empty_state[["title"]],
+      if (!is.null(empty_state[["subtitle"]])) sprintf("\n      <p>%s</p>", empty_state[["subtitle"]]) else "",
       scenario_html
     )
     # In tree mode, individual outputs and sections handle their own
@@ -443,39 +447,39 @@
 
   # Build page content snippets
   page_cases <- vapply(pages, function(p) {
-    if (!is.null(p$ui)) {
+    if (!is.null(p[["ui"]])) {
       # Declarative mode: walk the UI tree
-      content <- .render_tree_node(p$ui, inputs, outputs, port, module_outputs)
+      content <- .render_tree_node(p[["ui"]], inputs, outputs, port, module_outputs)
     } else {
-      content <- p$html %||% sprintf('<p>Sidan "%s" har inget inneh\u00e5ll \u00e4nnu.</p>', p$label)
+      content <- p[["html"]] %||% sprintf('<p>Sidan "%s" har inget inneh\u00e5ll \u00e4nnu.</p>', p[["label"]])
     }
-    sprintf("        {#if pageId === '%s'}\n          %s\n        {/if}", p$id, content)
+    sprintf("        {#if pageId === '%s'}\n          %s\n        {/if}", p[["id"]], content)
   }, character(1))
 
-  nav_title <- meta$title %||% ""
+  nav_title <- meta[["title"]] %||% ""
 
-  # Pages layout CSS (grid only — component styles live in .svelte files)
+  # Pages layout CSS (grid only -- component styles live in .svelte files)
   layout_css <- .generate_pages_layout_css(TRUE)
 
   # Check if any page uses declarative features that need CSS
   has_page_header <- any(vapply(pages, function(p) {
-    !is.null(p$ui) && .tree_has_type(p$ui, "page_header")
+    !is.null(p[["ui"]]) && .tree_has_type(p[["ui"]], "page_header")
   }, logical(1)))
   has_stat_cards <- any(vapply(pages, function(p) {
-    !is.null(p$ui) && .tree_has_type(p$ui, "stat_cards")
+    !is.null(p[["ui"]]) && .tree_has_type(p[["ui"]], "stat_cards")
   }, logical(1)))
-  has_page_content <- any(vapply(pages, function(p) !is.null(p$ui), logical(1)))
+  has_page_content <- any(vapply(pages, function(p) !is.null(p[["ui"]]), logical(1)))
 
   # Check if any module output uses filters
   has_filters <- any(vapply(module_outputs, function(mo) {
-    !is.null(mo$filters) && length(mo$filters) > 0
+    !is.null(mo[["filters"]]) && length(mo[["filters"]]) > 0
   }, logical(1)))
 
   extra_css <- paste0(
     .generate_page_header_css(has_page_header),
     .generate_page_content_css(has_page_content),
     .generate_filter_bar_css(has_filters),
-    # Always emit DSL primitive CSS — modals can use these at runtime
+    # Always emit DSL primitive CSS -- modals can use these at runtime
     # regardless of what the page tree contains (RenderNode.svelte).
     .generate_section_css(TRUE),
     .generate_columns_css(TRUE),

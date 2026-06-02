@@ -110,7 +110,7 @@ ambolt_verify_password <- function(password, hash) {
       if (Sys.time() < entry$locked_until) {
         return(FALSE)  # still locked out
       }
-      # Lockout expired — reset counter
+      # Lockout expired -- reset counter
       rm(list = username, envir = rate_limits)
       return(TRUE)
     }

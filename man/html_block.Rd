@@ -4,22 +4,40 @@
 \alias{html_block}
 \title{Escape hatch for raw HTML/JS in a page layout tree.}
 \usage{
-html_block(html, script = NULL, class = NULL, style = NULL)
+html_block(
+  html,
+  script = NULL,
+  class = NULL,
+  style = NULL,
+  .check_script_escapes = TRUE
+)
 }
 \arguments{
 \item{html}{Character. Raw HTML string.}
 
-\item{script}{Character. Optional raw JS (added to page script block).}
+\item{script}{Character. Optional raw JS (added to page script block).
+Watch out for R string-escape interactions: in a double-quoted R
+string, \verb{\\"} becomes \verb{"}, so writing \verb{script = "el.innerHTML = '<p style=\\"color:red\\">...'"} ends up sending the JS engine \code{el.innerHTML = '<p style="color:red">...'} -- and an outer single-quoted JS string will then end at the first inner \verb{"}. Prefer JS template literals (backticks) for inline HTML in script bodies. A heuristic warning fires at registration time when the script body looks like it has unescaped HTML attributes embedded in a JS string literal.}
 
 \item{class}{Character. Additional CSS class(es). Wraps HTML in a div.}
 
 \item{style}{Named list. Inline CSS properties. Wraps HTML in a div.}
+
+\item{.check_script_escapes}{Logical. Suppress the JS-string-escape
+heuristic warning when TRUE is unwanted. Default TRUE.}
 }
 \value{
 A layout node (named list with \code{type = "html_block"}).
 }
 \description{
-Escape hatch for raw HTML/JS in a page layout tree.
+The \code{script} parameter is executed in both contexts where html_block can
+appear: top-level page UI (codegen elevates the script via
+\code{.tree_collect_scripts} into the unified \verb{<script>} block) and modal
+responses (the runtime \code{RenderNode.svelte} emits a \verb{<script>} tag that
+Modal.svelte's effect re-creates so it executes). Authors should not
+need to know which context they are in -- the script string is treated
+identically in both. See \code{tests/testthat/test-html-block.R} for the
+tests that lock this contract.
 }
 \examples{
 html_block("<p>Plain HTML escape hatch.</p>")

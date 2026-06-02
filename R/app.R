@@ -1,6 +1,6 @@
 # --- ambolt entry point ----------------------------------------
 #
-# Exports create_app() — the user-facing API for declaring inputs,
+# Exports create_app() -- the user-facing API for declaring inputs,
 # outputs, layouts, and running the application.
 #
 # When loaded as a package (library(ambolt)), all R/*.R files are
@@ -88,11 +88,18 @@ create_app <- function(
   app_env$.modals <- list()
   app_env$.modules <- list()
   app_env$.module_outputs <- list()
+  # Route registry -- used by .check_route_shadowing() to warn about
+  # ambiorix `:param` vs literal-route registration-order foot-guns
+  app_env$.routes <- list()
+  # Nested design-token tree (color/font/radius/space/shadow). Set via
+  # `app$theme(tokens = ...)`. Additive across calls. See
+  # `.generate_design_tokens_block()` for the codegen.
+  app_env$.theme_tokens <- NULL
 
-  # Shared app context — available as req$context in handlers
+  # Shared app context -- available as req$context in handlers
   app_env$context <- new.env(parent = emptyenv())
 
-  # Register default CORS middleware (permissive — overridden by auth if configured)
+  # Register default CORS middleware (permissive -- overridden by auth if configured)
   app_env$.app$use(function(req, res) {
     # Auth mode installs its own CORS (same-origin + credentials).
     # Skip this permissive middleware when auth is active.
@@ -132,7 +139,7 @@ create_app <- function(
       svg_output <- svg_string()
       dev.off()
 
-      # Force to a plain character string — svgstring() returns an
+      # Force to a plain character string -- svgstring() returns an
       # htmltools::HTML object which some serializers handle differently
       svg_text <- paste0(as.character(svg_output), collapse = "")
 
@@ -241,9 +248,9 @@ create_app <- function(
   # and CORS tightening. The framework handles cookies (HttpOnly), login UI,
   # and route protection. The developer provides verify and login functions.
   #
-  # @param verify function(token, db) — return user data (list) or NULL.
-  # @param login function(username, password, db) — return list(token, user) or NULL.
-  # @param logout function(token, db) — optional cleanup on logout.
+  # @param verify function(token, db) -- return user data (list) or NULL.
+  # @param login function(username, password, db) -- return list(token, user) or NULL.
+  # @param logout function(token, db) -- optional cleanup on logout.
   # @param login_title Character. Title on login page.
   # @param exclude Character vector. Paths that skip auth.
   # @param cookie_name Character. Cookie name.
@@ -310,13 +317,33 @@ create_app <- function(
       full
     }
 
+    # Detect ambiorix route-ordering foot-guns at registration time. Logged
+    # in observations.md 2026-04-15: `mod$get("/:id", ...)` registered before
+    # `mod$get("/compare", ...)` silently captures `/compare` as `id="compare"`
+    # → 404. Ambolt warns when the new literal route would be shadowed by an
+    # already-registered `:param` route on the same method.
+    register_route <- function(method, full_path) {
+      shadow <- .check_route_shadowing(app_env$.routes, method, full_path)
+      if (!is.null(shadow)) {
+        warning(sprintf(
+          "Route %s %s will be shadowed by earlier %s route -- ambiorix matches in registration order, so this literal will return 404. Register literal routes BEFORE `:param` routes that match the same shape.",
+          method, full_path, shadow), call. = FALSE)
+      }
+      app_env$.routes <- c(app_env$.routes,
+        list(list(method = method, path = full_path)))
+    }
+
     mod$get <- function(path, handler) {
-      app_env$.app$get(make_path(path), handler)
+      full_path <- make_path(path)
+      register_route("GET", full_path)
+      app_env$.app$get(full_path, handler)
       invisible(mod)
     }
 
     mod$post <- function(path, handler) {
-      app_env$.app$post(make_path(path), function(req, res) {
+      full_path <- make_path(path)
+      register_route("POST", full_path)
+      app_env$.app$post(full_path, function(req, res) {
         if (!is.null(req$CONTENT_TYPE) &&
             grepl("application/json", req$CONTENT_TYPE, fixed = TRUE)) {
           req$body <- ambiorix::parse_json(req)
@@ -327,7 +354,9 @@ create_app <- function(
     }
 
     mod$put <- function(path, handler) {
-      app_env$.app$put(make_path(path), function(req, res) {
+      full_path <- make_path(path)
+      register_route("PUT", full_path)
+      app_env$.app$put(full_path, function(req, res) {
         if (!is.null(req$CONTENT_TYPE) &&
             grepl("application/json", req$CONTENT_TYPE, fixed = TRUE)) {
           req$body <- ambiorix::parse_json(req)
@@ -338,7 +367,9 @@ create_app <- function(
     }
 
     mod$delete <- function(path, handler) {
-      app_env$.app$delete(make_path(path), handler)
+      full_path <- make_path(path)
+      register_route("DELETE", full_path)
+      app_env$.app$delete(full_path, handler)
       invisible(mod)
     }
 
@@ -397,14 +428,25 @@ create_app <- function(
   # @param trigger Character. Optional input id (action button) that gates
   #   when this output fetches. If set, the output only renders when the
   #   trigger fires, not on every input change.
-  app_env$output <- function(id, type, render, depends_on = NULL, trigger = NULL) {
-    # If depends_on not specified, assume it depends on all inputs
+  app_env$output <- function(id, type, render, depends_on = NULL, trigger = NULL,
+                             refresh_event = NULL) {
+    # If depends_on not specified, assume it depends on all inputs.
+    # Expand the few input types whose state lives in MORE than one
+    # variable (date_range -> {id}_start / {id}_end; server_search keeps
+    # the bare id, since its query state is a derived display-only var).
     if (is.null(depends_on)) {
-      depends_on <- names(app_env$.inputs)
+      depends_on <- unlist(lapply(app_env$.inputs, function(inp) {
+        if (identical(inp[["type"]], "date_range")) {
+          c(paste0(inp[["id"]], "_start"), paste0(inp[["id"]], "_end"))
+        } else {
+          inp[["id"]]
+        }
+      }), use.names = FALSE)
     }
     app_env$.outputs[[id]] <- list(
       id = id, type = type, render = render,
-      depends_on = depends_on, trigger = trigger
+      depends_on = depends_on, trigger = trigger,
+      refresh_event = refresh_event
     )
     invisible(app_env)
   }
@@ -412,7 +454,7 @@ create_app <- function(
   # Set the layout
   #
   # @param ... Layout specification. Currently supports:
-  #   "sidebar" — inputs on left, outputs on right (default)
+  #   "sidebar" -- inputs on left, outputs on right (default)
   #   list(type = "tabs", tabs = list(list(id=, label=, outputs=), ...))
   app_env$layout <- function(...) {
     args <- list(...)
@@ -479,7 +521,7 @@ create_app <- function(
   # @param id Character. Unique identifier for this section.
   # @param inputs Character vector. Input ids that belong to this section.
   # @param label Character. Optional heading displayed above the group.
-  # @param show_after Character. Optional trigger id — section is hidden
+  # @param show_after Character. Optional trigger id -- section is hidden
   #   until this action button has been clicked.
   # @param show_when List. Optional input-driven visibility (same as input show_when).
   app_env$section <- function(id, inputs, label = NULL, show_after = NULL, show_when = NULL) {
@@ -515,7 +557,14 @@ create_app <- function(
   #   inline `css` string, so both can be used together.
   # @param fonts Character vector. Google Fonts URLs to load via <link> tags.
   app_env$theme <- function(css = NULL, css_file = NULL, fonts = NULL, colors = NULL,
-                            radius = NULL, components = NULL) {
+                            radius = NULL, components = NULL, tokens = NULL) {
+    if (!is.null(tokens)) {
+      # Additive: deep-merge into existing tokens so successive theme()
+      # calls accumulate (color, font, radius, space, shadow categories).
+      # Setting a value to NULL inside `tokens` does NOT delete a prior
+      # value -- pass list() to start fresh.
+      app_env$.theme_tokens <- .deep_merge_lists(app_env$.theme_tokens, tokens)
+    }
     if (!is.null(colors)) app_env$.theme_colors <- colors
     if (!is.null(radius)) app_env$.theme_radius <- radius
     if (!is.null(components)) app_env$.theme_components <- components
@@ -575,7 +624,7 @@ create_app <- function(
   #   API requests are proxied to ambiorix. Default FALSE.
   app_env$run <- function(dev = FALSE, rebuild = FALSE, clean = FALSE) {
     # `clean = TRUE` wipes the entire .ambolt_build/ (incl. node_modules)
-    # — use when dependencies or Vite cache may be corrupt. `rebuild = TRUE`
+    # -- use when dependencies or Vite cache may be corrupt. `rebuild = TRUE`
     # is the lighter alternative that just regenerates and rebuilds.
     if (isTRUE(clean)) {
       build_base <- Sys.getenv("AMBOLT_BUILD_DIR", "")
@@ -589,6 +638,11 @@ create_app <- function(
     app_env$.rebuild <- rebuild
     has_declarations <- length(app_env$.inputs) > 0 || length(app_env$.outputs) > 0
     has_pages <- !is.null(app_env$.pages)
+    # A UI tree without any inputs/outputs (a "layout-only" demo) still
+    # needs to be built and served as a SPA — the alternative is hitting
+    # ambiorix's `start()` with zero routes, which errors out. Treat any
+    # configured UI tree as a build trigger.
+    has_ui_tree <- !is.null(app_env$.ui_tree)
 
     # Register on_stop hooks
     if (length(app_env$.on_stop_hooks) > 0) {
@@ -611,7 +665,7 @@ create_app <- function(
       .register_modal_endpoints(app_env)
     }
 
-    if (has_declarations || has_pages) {
+    if (has_declarations || has_pages || has_ui_tree) {
       if (has_declarations) {
         .register_output_endpoints(app_env)
       }

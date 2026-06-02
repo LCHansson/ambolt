@@ -40,11 +40,11 @@
 #'   main = main("result")
 #' )
 sidebar_layout <- function(sidebar, main) {
-  stopifnot(sidebar$type == "sidebar", main$type == "main")
+  stopifnot(sidebar[["type"]] == "sidebar", main[["type"]] == "main")
   list(type = "sidebar_layout", sidebar = sidebar, main = main)
 }
 
-#' Sidebar panel — left column in a sidebar_layout.
+#' Sidebar panel -- left column in a sidebar_layout.
 #'
 #' @param ... Children: input/output ids (strings) or nested layout nodes.
 #' @return A layout node (named list with `type = "sidebar"`).
@@ -53,7 +53,7 @@ sidebar <- function(...) {
   list(type = "sidebar", children = list(...))
 }
 
-#' Main content panel — right column in a sidebar_layout.
+#' Main content panel -- right column in a sidebar_layout.
 #'
 #' @param ... Children: input/output ids (strings) or nested layout nodes.
 #' @return A layout node (named list with `type = "main"`).
@@ -141,7 +141,7 @@ details <- function(label, ..., open = FALSE, show_after = NULL,
 #
 # Declarative layout functions for pages-mode apps. These let the
 # developer compose page UI in R instead of writing raw HTML strings.
-# Each function returns a plain list with $type — the tree walker
+# Each function returns a plain list with $type -- the tree walker
 # dispatches on this to produce Svelte markup.
 
 #' Container for page children (analogous to main() for sidebar mode).
@@ -185,8 +185,8 @@ page_header <- function(title, subtitle = NULL, actions = list(),
 #' Stat cards grid.
 #'
 #' Two forms:
-#'   \code{stat_cards("module/output")} — reference a module output (page context)
-#'   \code{stat_cards(endpoint = "/api/...", cards = list(...))} — inline config (modal context)
+#'   \code{stat_cards("module/output")} -- reference a module output (page context)
+#'   \code{stat_cards(endpoint = "/api/...", cards = list(...))} -- inline config (modal context)
 #'
 #' @param output_id Character. Fully qualified output id ("module/output") for
 #'   the legacy reference form. Mutually exclusive with \code{endpoint}/\code{cards}.
@@ -257,17 +257,63 @@ data_table <- function(endpoint, columns = NULL, page_size = 0L,
 
 #' Escape hatch for raw HTML/JS in a page layout tree.
 #'
+#' The `script` parameter is executed in both contexts where html_block can
+#' appear: top-level page UI (codegen elevates the script via
+#' `.tree_collect_scripts` into the unified `<script>` block) and modal
+#' responses (the runtime `RenderNode.svelte` emits a `<script>` tag that
+#' Modal.svelte's effect re-creates so it executes). Authors should not
+#' need to know which context they are in -- the script string is treated
+#' identically in both. See `tests/testthat/test-html-block.R` for the
+#' tests that lock this contract.
+#'
 #' @param html Character. Raw HTML string.
 #' @param script Character. Optional raw JS (added to page script block).
+#'   Watch out for R string-escape interactions: in a double-quoted R
+#'   string, `\"` becomes `"`, so writing `script = "el.innerHTML = '<p style=\"color:red\">...'"` ends up sending the JS engine `el.innerHTML = '<p style="color:red">...'` -- and an outer single-quoted JS string will then end at the first inner `"`. Prefer JS template literals (backticks) for inline HTML in script bodies. A heuristic warning fires at registration time when the script body looks like it has unescaped HTML attributes embedded in a JS string literal.
 #' @param class Character. Additional CSS class(es). Wraps HTML in a div.
 #' @param style Named list. Inline CSS properties. Wraps HTML in a div.
+#' @param .check_script_escapes Logical. Suppress the JS-string-escape
+#'   heuristic warning when TRUE is unwanted. Default TRUE.
 #' @return A layout node (named list with `type = "html_block"`).
 #' @export
 #' @examples
 #' html_block("<p>Plain HTML escape hatch.</p>")
-html_block <- function(html, script = NULL, class = NULL, style = NULL) {
+html_block <- function(html, script = NULL, class = NULL, style = NULL,
+                       .check_script_escapes = TRUE) {
+  if (.check_script_escapes && !is.null(script)) {
+    .warn_script_escape_risk(script)
+  }
   .drop_nulls(list(type = "html_block", html = html, script = script,
                    class = class, style = style))
+}
+
+#' Heuristic warning for the JS-string-escape foot-gun in `html_block(script=)`.
+#'
+#' Detects the pattern from observations.md (2026-04-15): R's string-escape
+#' rules silently convert `\"` to `"`, so authors who escape HTML attributes
+#' inside a JS string literal end up with broken JS at runtime. The cheapest
+#' reliable signature is `="<TAG ... ATTR="` -- the JS string opener `="` is
+#' followed by `<TAG ATTR=` and another `"` before the JS string would
+#' legitimately close. False positives are possible (the user might be
+#' building two adjacent strings); the warning is opt-out via
+#' `.check_script_escapes = FALSE` on the caller.
+#' @noRd
+.warn_script_escape_risk <- function(script) {
+  # Pattern: `="<word...attr="...` -- opening JS string followed by an HTML
+  # tag whose attribute uses unescaped double quotes that will collide.
+  if (grepl('=\\s*"<\\w+[^"<>]*\\s\\w+\\s*=\\s*"', script, perl = TRUE)) {
+    warning(
+      "html_block(script=): possible JS string-escape collision. ",
+      "Script body contains a pattern like `... = \"<tag attr=\"value\"...\"` ",
+      "which suggests an R double-quoted string with `\\\"`-escaped HTML ",
+      "attributes. R strips the backslashes before codegen, so the JS engine ",
+      "sees unescaped `\"` inside the outer string literal and parses garbage. ",
+      "Prefer JS template literals (backticks) for inline HTML. ",
+      "Pass `.check_script_escapes = FALSE` to suppress if intentional.",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
 }
 
 #' Action button for page_header actions (e.g. "Ny interaktion").

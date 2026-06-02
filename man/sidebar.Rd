@@ -2,7 +2,7 @@
 % Please edit documentation in R/layout_dsl.R
 \name{sidebar}
 \alias{sidebar}
-\title{Sidebar panel — left column in a sidebar_layout.}
+\title{Sidebar panel -- left column in a sidebar_layout.}
 \usage{
 sidebar(...)
 }
@@ -13,5 +13,5 @@ sidebar(...)
 A layout node (named list with \code{type = "sidebar"}).
 }
 \description{
-Sidebar panel — left column in a sidebar_layout.
+Sidebar panel -- left column in a sidebar_layout.
 }
