@@ -49,5 +49,12 @@
     border: 1px solid var(--ambolt-input-border-color, #d1d5db);
     border-radius: var(--ambolt-input-radius, 4px);
     background: white;
+    width: 100%;
+    box-sizing: border-box;
+    /* Pinned baseline height in rem (root font-size, not the swapped
+       webfont) so Chrome's native <select> doesn't shrink to fallback-
+       font metrics on cold load and stay there after the webfont swaps
+       in. Matches the same token on input-driven components. */
+    min-height: var(--ambolt-input-min-height, 2.5rem);
   }
 </style>

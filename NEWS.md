@@ -19,6 +19,23 @@
   (e.g. an IIFE becomes `export default app(function(){...})()`,
   throwing TypeError at module load and silently swallowing the
   user's code).
+* `SelectInput` now sets `width: 100%`, `box-sizing: border-box` and
+  a pinned `min-height: var(--ambolt-input-min-height, 2.5rem)` on
+  the `<select>`. The width / box-sizing pair fixes content-area
+  selects overflowing their flex column at threshold viewport widths
+  (the sidebar selects were protected by EK theme `width: 100%
+  !important` already; content-area selects fell through to native
+  intrinsic width). The pinned min-height fixes a FOUT-driven height
+  collapse on cold loads: Chrome's native `<select>` computes its
+  height from font metrics at mount and does not recompute when a
+  webfont swaps in, so without an explicit `min-height` the select
+  stays sized to the fallback font's smaller metrics even after the
+  intended font has loaded.
+* `TextInput` and `NumericInput` get matching
+  `min-height: var(--ambolt-input-min-height, 2.5rem)` (and
+  `box-sizing: border-box` on `NumericInput`) so all three input
+  primitives share the same vertical baseline regardless of font
+  load state.
 
 # ambolt 0.2.0
 

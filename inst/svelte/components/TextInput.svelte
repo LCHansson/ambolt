@@ -35,5 +35,6 @@
     border-radius: var(--ambolt-input-radius, 4px);
     width: 100%;
     box-sizing: border-box;
+    min-height: var(--ambolt-input-min-height, 2.5rem);
   }
 </style>

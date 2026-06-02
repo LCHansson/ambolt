@@ -42,5 +42,7 @@
     border: 1px solid var(--ambolt-input-border-color, #d1d5db);
     border-radius: var(--ambolt-input-radius, 4px);
     width: 120px;
+    box-sizing: border-box;
+    min-height: var(--ambolt-input-min-height, 2.5rem);
   }
 </style>
