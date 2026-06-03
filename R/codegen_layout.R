@@ -31,6 +31,11 @@
     --ambolt-font: system-ui, sans-serif;
     --ambolt-max-width: 1200px;
     --ambolt-sidebar-width: 280px;
+    /* Used in the 1198 px breakpoint to shrink the sidebar while it
+       still sits beside main. Targets grid-template-columns directly
+       (not the --ambolt-sidebar-width token) so that user-theme :root
+       overrides loaded after this stylesheet do not win the cascade. */
+    --ambolt-sidebar-width-narrow: 280px;
     --ambolt-gap: 2rem;
     --ambolt-sidebar-bg: white;
     --ambolt-sidebar-border: 1px solid #d1d5db;
@@ -61,6 +66,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--ambolt-content-gap);
+  }
+  @media (max-width: 1198px) {
+    .sidebar-layout {
+      grid-template-columns: var(--ambolt-sidebar-width-narrow) 1fr;
+    }
   }
   @media (max-width: 768px) {
     main { padding: 0 0.5rem; margin: 1rem auto; }
@@ -114,6 +124,7 @@
     --ambolt-font: system-ui, sans-serif;
     --ambolt-max-width: 1200px;
     --ambolt-sidebar-width: 280px;
+    --ambolt-sidebar-width-narrow: 280px;
     --ambolt-gap: 2rem;
     --ambolt-sidebar-bg: white;
     --ambolt-sidebar-border: 1px solid #d1d5db;
@@ -150,6 +161,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--ambolt-content-gap);
+  }
+  @media (max-width: 1198px) {
+    .sidebar-layout {
+      grid-template-columns: var(--ambolt-sidebar-width-narrow) 1fr;
+    }
   }
   @media (max-width: 768px) {
     main { padding: 0 0.5rem; margin: 1rem auto; }

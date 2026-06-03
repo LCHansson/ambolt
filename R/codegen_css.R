@@ -540,7 +540,10 @@
     flex: 1;
     min-width: 0;
   }
-  @media (max-width: 768px) {
+  /* Stack inner columns vertically while the sidebar is still visible
+     (768-1024 zone) — gives compact secondary panels enough room to
+     render their fixed-width inputs without overflowing the iframe. */
+  @media (max-width: 1024px) {
     .ambolt-columns { flex-direction: column; }
   }'
 }

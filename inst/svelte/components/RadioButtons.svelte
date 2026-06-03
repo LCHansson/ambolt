@@ -101,12 +101,24 @@
   }
   .bar-buttons {
     display: flex;
+    /* flex-wrap so long-label options drop to a new row when the bar's
+       container is too narrow to hold them side-by-side without text
+       clipping. justify-content: center centres a lone wrapped option
+       (the typical "third option" case in a 3-option radio bar). */
+    flex-wrap: wrap;
+    justify-content: center;
     border: 1px solid var(--ambolt-radio-bar-border, #d1d5db);
     border-radius: var(--ambolt-radio-bar-radius, 6px);
     overflow: hidden;
   }
   .bar-button {
     flex: 1;
+    /* min-width forces wrap when buttons can no longer fit at their
+       comfortable per-button width; max-width keeps a lone wrapped
+       button at half-bar width (so it visually centres rather than
+       stretching to fill its own row). */
+    min-width: var(--ambolt-radio-bar-min-button, 100px);
+    max-width: 50%;
     padding: 0.7rem 0.5rem;
     border: none;
     border-right: 1px solid var(--ambolt-radio-bar-border, #d1d5db);

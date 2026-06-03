@@ -55,6 +55,36 @@
   labels) overflowed the page right margin in iframe embeddings
   without producing a scrollbar.
 
+## Responsive layout
+
+* Two new intermediate breakpoints for `sidebar_layout` apps. Earlier
+  there was only one (`max-width: 768px`, full mobile collapse). Now:
+  - **1198 px**: `.sidebar-layout` switches its `grid-template-columns`
+    to use the new `--ambolt-sidebar-width-narrow` token (default
+    `280px`). Sidebar stays beside main but at a slimmer footprint, so
+    inputs are not absurdly wide on narrow laptops or iframes.
+  - **1024 px**: `.ambolt-columns` switches to `flex-direction: column`.
+    Inner column blocks (e.g. compact secondary panels) stack
+    vertically while the sidebar is still visible, eliminating the
+    horizontal iframe overflow that occurred between 1024–1198 px
+    when fixed-width compact rows could not all fit side-by-side.
+  - **768 px** (unchanged): full mobile — sidebar drops below main.
+* `RadioButtons` (`.bar-buttons` / `.bar-button`) now wraps long-label
+  options to a new row instead of clipping their text. A lone wrapped
+  option centres on its own row via `justify-content: center` plus a
+  per-button `max-width: 50%`. New token
+  `--ambolt-radio-bar-min-button` (default `100px`) controls the
+  per-button width at which wrapping is forced.
+* `NumericInputWithUnit` `<input>` now uses
+  `width: var(--ambolt-numeric-input-width, 120px); min-width: 0;`
+  so the input can shrink below its preferred width inside a narrow
+  sidebar (the 1024–1198 zone). Apps that want a specifically narrower
+  preferred width can override the new token.
+* CSS `@media` cannot consume `var()` for its threshold values, so the
+  breakpoint numbers themselves (1198, 1024) are hard-coded in the
+  framework's generated CSS. Apps that need different thresholds add
+  their own `@media` rules in `app$theme(css = ...)` / `theme.css`.
+
 # ambolt 0.2.0
 
 First tagged release since 0.1.0. Consolidates 67 development bumps

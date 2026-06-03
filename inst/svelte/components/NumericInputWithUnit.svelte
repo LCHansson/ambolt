@@ -52,7 +52,13 @@
     padding: var(--ambolt-input-padding, 0.35rem 0.5rem);
     border: 1px solid var(--ambolt-input-border-color, #d1d5db);
     border-radius: var(--ambolt-input-radius, 4px) 0 0 var(--ambolt-input-radius, 4px);
-    width: 120px;
+    /* width is the flex-basis: the input lays out at this size when
+       there's room, and shrinks below it on narrower viewports (the
+       1024-1198 sidebar-shrink zone). `min-width: 0` is what actually
+       unlocks the shrink — without it `min-width: auto` resolves to
+       the content width and pins the input at its widest digit count. */
+    width: var(--ambolt-numeric-input-width, 120px);
+    min-width: 0;
     flex: 1;
   }
   .unit {
