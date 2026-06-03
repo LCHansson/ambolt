@@ -36,6 +36,24 @@
   `box-sizing: border-box` on `NumericInput`) so all three input
   primitives share the same vertical baseline regardless of font
   load state.
+* `.section-compact` now sets `min-height: 0 !important` on its
+  `<select>` and `<input>` rules to cancel the new framework-wide
+  `--ambolt-input-min-height` baseline. Without this, compact-mode
+  rows pinned to a `height: 20px` row inherited the 2.5rem baseline
+  via `min-height`, making compact selects render at ~40 px instead
+  of the intended 20 px.
+* `.section-compact` `<label>` now adds `min-width: 0 !important;
+  overflow: hidden; text-overflow: ellipsis;` alongside the existing
+  `white-space: nowrap`. The nowrap rule combined with a fixed-width
+  input (70/140 px) gave each row a min-content width = full label
+  text + input, which propagated through `display: flex` ancestors
+  and broke out of the column / section / `main` chain when a column
+  was narrower than that sum. The new ellipsis truncates the label
+  instead, so the row's min-content collapses to the fixed input
+  width and stays inside its column. Discovered when Elektrifierings-
+  kollen's "Skatt" / "Däck" toggle sections (compact + long Swedish
+  labels) overflowed the page right margin in iframe embeddings
+  without producing a scrollbar.
 
 # ambolt 0.2.0
 

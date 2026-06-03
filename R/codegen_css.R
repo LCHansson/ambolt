@@ -463,6 +463,15 @@
   }
   .section-compact :global(label) {
     flex: 1 !important;
+    /* min-width: 0 lets the label shrink below its nowrap content size
+       when the column is narrower than label + fixed-width input would
+       otherwise need. Without it, long labels (e.g. multi-word Swedish
+       question text) push the row past the column edge. The overflow /
+       ellipsis pair degrades a too-long label to a truncated one-liner
+       rather than overflowing the parent. */
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
     text-align: right !important;
     white-space: nowrap !important;
     margin-bottom: 0 !important;
@@ -473,6 +482,10 @@
   .section-compact :global(input[type="text"]) {
     width: var(--ambolt-compact-input-width, 70px) !important;
     height: var(--ambolt-compact-row-height, 20px) !important;
+    /* Cancel the framework-wide --ambolt-input-min-height baseline so
+       compact mode stays at the explicit row height (the global default
+       would otherwise pin all inputs/selects to 2.5rem). */
+    min-height: 0 !important;
     padding: 0 4px !important;
     font-size: var(--ambolt-compact-font-size, 12px) !important;
     border-radius: 4px !important;
@@ -481,6 +494,7 @@
   .section-compact :global(select) {
     width: var(--ambolt-compact-select-width, 140px) !important;
     height: var(--ambolt-compact-row-height, 20px) !important;
+    min-height: 0 !important;
     padding: 0 14px 0 4px !important;
     font-size: var(--ambolt-compact-font-size, 12px) !important;
     border-radius: 4px !important;
