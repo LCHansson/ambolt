@@ -61,12 +61,15 @@
     meta$lang, favicon_tag, meta$title),
     file.path(build_base, "index.html"))
 
-  # Write vite.config.js -- dev mode adds API proxy
+  # Write vite.config.js -- dev mode adds the dev server port and API proxy.
+  # strictPort makes Vite exit on a port conflict instead of moving to the
+  # next free port, which run() would not know about.
   if (mode == "dev") {
     api_target <- sprintf("http://%s:%d", app_env$.host, app_env$.port)
+    dev_port <- as.integer(app_env$.dev_port %||% 5173L)
     writeLines(sprintf(
-      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte({\n    onwarn: (warning, handler) => {\n      if (warning.code === 'css_unused_selector') return;\n      handler(warning);\n    }\n  })],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n      'd3-geo': resolve('node_modules/d3-geo'),\n    }\n  },\n  server: {\n    proxy: {\n      '/api': '%s'\n    }\n  }\n})",
-      framework_dir_js, api_target),
+      "import { defineConfig } from 'vite'\nimport { svelte } from '@sveltejs/vite-plugin-svelte'\nimport { resolve } from 'path'\n\nexport default defineConfig({\n  plugins: [svelte({\n    onwarn: (warning, handler) => {\n      if (warning.code === 'css_unused_selector') return;\n      handler(warning);\n    }\n  })],\n  resolve: {\n    alias: {\n      'ambolt': '%s',\n      'flatpickr': resolve('node_modules/flatpickr'),\n      'svelteplot': resolve('node_modules/svelteplot'),\n      'd3-geo': resolve('node_modules/d3-geo'),\n    }\n  },\n  server: {\n    port: %d,\n    strictPort: true,\n    proxy: {\n      '/api': '%s'\n    }\n  }\n})",
+      framework_dir_js, dev_port, api_target),
       file.path(build_base, "vite.config.js"))
   } else {
     writeLines(sprintf(
@@ -194,6 +197,41 @@
   }
 
   build_base
+}
+
+#' Is something already listening on a local TCP port?
+#' @noRd
+.port_in_use <- function(port) {
+  con <- tryCatch(
+    suppressWarnings(socketConnection(
+      host = "127.0.0.1", port = port, open = "r+", blocking = TRUE, timeout = 1
+    )),
+    error = function(e) NULL
+  )
+  if (is.null(con)) return(FALSE)
+  close(con)
+  TRUE
+}
+
+#' Validate the Vite dev server port and make sure it is free
+#'
+#' @return The port as an integer.
+#' @noRd
+.check_dev_port <- function(dev_port) {
+  if (length(dev_port) != 1 || is.na(dev_port) || dev_port < 1 || dev_port > 65535) {
+    stop("`dev_port` must be a single port number between 1 and 65535. ",
+         "Check `create_app(dev_port = )` and the AMBOLT_DEV_PORT environment variable.",
+         call. = FALSE)
+  }
+  dev_port <- as.integer(dev_port)
+  if (.port_in_use(dev_port)) {
+    stop(sprintf(paste0(
+      "Port %d is already in use, so the Vite dev server cannot start there. ",
+      "Stop the other process, or pick another port with ",
+      "`create_app(dev_port = )` or the AMBOLT_DEV_PORT environment variable."),
+      dev_port), call. = FALSE)
+  }
+  dev_port
 }
 
 #' Register API endpoints for all declared outputs

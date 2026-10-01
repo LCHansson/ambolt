@@ -47,6 +47,11 @@ if (!isNamespace(environment())) {
 #'
 #' @param port Integer. Port for the R API server. Default 3000.
 #' @param host Character. Host address. Default "127.0.0.1".
+#' @param dev_port Integer. Port for the Vite dev server that
+#'   `app$run(dev = TRUE)` starts. Default 5173, or the environment
+#'   variable `AMBOLT_DEV_PORT` when set. The port is strict: if it is
+#'   taken, `run()` stops instead of letting Vite drift to the next free
+#'   port. Not used in production mode.
 #' @return An ambolt app object (an environment with registration methods).
 #' @export
 #' @examples
@@ -61,7 +66,8 @@ if (!isNamespace(environment())) {
 #' }
 create_app <- function(
   port = as.integer(Sys.getenv("AMBOLT_PORT", "3000")),
-  host = Sys.getenv("AMBOLT_HOST", "127.0.0.1")
+  host = Sys.getenv("AMBOLT_HOST", "127.0.0.1"),
+  dev_port = as.integer(Sys.getenv("AMBOLT_DEV_PORT", "5173"))
 ) {
   app_env <- new.env(parent = emptyenv())
 
@@ -69,6 +75,7 @@ create_app <- function(
   app_env$.app <- ambiorix::Ambiorix$new(port = port, host = host)
   app_env$.port <- port
   app_env$.host <- host
+  app_env$.dev_port <- dev_port
 
   # Storage for Stage 2 declarations
   app_env$.inputs <- list()
@@ -620,8 +627,9 @@ create_app <- function(
   # Otherwise, just starts the API server (Stage 1 mode).
   #
   # @param dev Logical. If TRUE, starts Vite dev server with HMR instead of
-  #   building static files. The user visits Vite's port (default 5173) and
-  #   API requests are proxied to ambiorix. Default FALSE.
+  #   building static files. The user visits Vite's port (`dev_port` in
+  #   create_app(), default 5173) and API requests are proxied to ambiorix.
+  #   Default FALSE.
   app_env$run <- function(dev = FALSE, rebuild = FALSE, clean = FALSE) {
     # `clean = TRUE` wipes the entire .ambolt_build/ (incl. node_modules)
     # -- use when dependencies or Vite cache may be corrupt. `rebuild = TRUE`
@@ -671,12 +679,16 @@ create_app <- function(
       }
 
       if (dev) {
-        # Dev mode: generate project, start Vite dev server with HMR
+        # Dev mode: generate project, start Vite dev server with HMR.
+        # Check the port first: Vite runs detached and logs to a file, so
+        # a port conflict would otherwise go unnoticed and the browser
+        # would open whatever app already owns the port.
+        dev_port <- .check_dev_port(app_env$.dev_port)
         build_dir <- .generate_dev_project(app_env)
         cat(sprintf("ambolt API running at http://%s:%d\n", host, port))
         cat("Starting Vite dev server (with HMR)...\n")
         .start_vite_dev(build_dir)
-        vite_url <- "http://localhost:5173"
+        vite_url <- sprintf("http://localhost:%d", dev_port)
         cat(sprintf("Visit %s for the app (hot-reloading enabled)\n", vite_url))
 
         # Open Vite URL in RStudio Viewer (or system browser outside RStudio).

@@ -1,3 +1,17 @@
+# ambolt 0.2.0.9004
+
+## New features
+
+* **`create_app(dev_port = )` — the Vite dev server port is configurable.**
+  `app$run(dev = TRUE)` used to assume port 5173. When another app already
+  held that port, Vite quietly moved to the next free one while ambolt still
+  printed and opened `http://localhost:5173`, so the browser showed the other
+  app. The port is now an argument (default 5173, or the environment variable
+  `AMBOLT_DEV_PORT`), it is written into the generated dev `vite.config.js`
+  together with `strictPort: true`, and `run()` stops with a clear message if
+  the port is taken or invalid. Production builds are unaffected: the
+  production `vite.config.js` has no dev server block.
+
 # ambolt 0.2.0.9003
 
 ## Bug fixes

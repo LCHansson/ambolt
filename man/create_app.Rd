@@ -6,13 +6,20 @@
 \usage{
 create_app(
   port = as.integer(Sys.getenv("AMBOLT_PORT", "3000")),
-  host = Sys.getenv("AMBOLT_HOST", "127.0.0.1")
+  host = Sys.getenv("AMBOLT_HOST", "127.0.0.1"),
+  dev_port = as.integer(Sys.getenv("AMBOLT_DEV_PORT", "5173"))
 )
 }
 \arguments{
 \item{port}{Integer. Port for the R API server. Default 3000.}
 
 \item{host}{Character. Host address. Default "127.0.0.1".}
+
+\item{dev_port}{Integer. Port for the Vite dev server that
+\code{app$run(dev = TRUE)} starts. Default 5173, or the environment
+variable \code{AMBOLT_DEV_PORT} when set. The port is strict: if it is
+taken, \code{run()} stops instead of letting Vite drift to the next free
+port. Not used in production mode.}
 }
 \value{
 An ambolt app object (an environment with registration methods).
