@@ -157,4 +157,29 @@
     width: 40px;
     height: 28px;
   }
+  /* At narrow widths (where the bar typically wraps), switch from the
+     "shared-frame bar" visual to "individual pill buttons". This avoids
+     two visual artefacts when wrapping occurs at the default 100 px-
+     per-button threshold:
+       1. The shared frame would surround both rows, including the
+          empty area around a lone wrapped button (looks misaligned).
+       2. The wrapped button has no shared border with a neighbour, so
+          it appears unframed against the bar's interior.
+     The breakpoint matches the sidebar-shrink threshold (1198 px) —
+     below that the sidebar gets narrow enough that wrap is likely. */
+  @media (max-width: 1198px) {
+    .bar-buttons {
+      border: none;
+      overflow: visible;
+      gap: 4px;
+    }
+    .bar-button {
+      border: 1px solid var(--ambolt-radio-bar-border, #d1d5db);
+      border-right: 1px solid var(--ambolt-radio-bar-border, #d1d5db);
+      border-radius: var(--ambolt-radio-bar-radius, 6px);
+    }
+    .bar-button:last-child {
+      border-right: 1px solid var(--ambolt-radio-bar-border, #d1d5db);
+    }
+  }
 </style>

@@ -15,10 +15,16 @@
 
   function handleExplore() {
     if (basket.count === 0) return;
-    // Dispatch ambolt:select for the first basket item to enter explorer mode
+    // Enter explorer mode by setting kpi_search to the first item. fromBasket
+    // marks this as a multi-view entry so MultiViewPanel does NOT treat it as a
+    // single-KPI selection (which would clear the views we are about to build).
     const first = basket.items[0];
     document.dispatchEvent(new CustomEvent('ambolt:select', {
-      detail: { inputId: 'kpi_search', value: first.value, label: first.label }
+      detail: { inputId: 'kpi_search', value: first.value, label: first.label, fromBasket: true }
+    }));
+    // Explicitly activate the multi-view with all current basket KPIs.
+    document.dispatchEvent(new CustomEvent('ambolt:explore-basket', {
+      detail: { values: basket.items.map(i => i.value) }
     }));
     onExplore();
   }

@@ -1,3 +1,68 @@
+# ambolt 0.2.0.9003
+
+## Bug fixes
+
+* **`DynamicFilters.svelte` — filter changes no longer lag by one.** The
+  serialized `value` (the JSON `filters` string read by dependent outputs)
+  was written in a separate `$effect` (`value = JSON.stringify(filterValues)`).
+  Writing a `$bindable` from an `$effect` lands in a later update cycle, so the
+  chart read `value` one change behind — the user changed filter A, saw nothing;
+  changed filter B, saw A's effect. `value` is now updated synchronously in the
+  same call that mutates `filterValues` (via a `setFilterValues()` helper and a
+  function-pair `bind:value` to `FilterRenderer`), so dependent outputs always
+  see the current selection.
+
+# ambolt 0.2.0.9002
+
+## Bug fixes
+
+* **`DynamicFilters.svelte` — range filters are clamped to the new KPI's
+  bounds on a spec change.** `pruneValue()` previously left `range` dims
+  untouched, so a preserved year-range kept a handle outside the new KPI's
+  extent (e.g. min-year stuck at 2001 while the new slider track is
+  2015–2025). Range values are now clamped into `[dim.min, dim.max]` (and
+  reset to the full bounds if fully out of range). Follow-up to the
+  filter-state work in 0.2.0.9001.
+
+# ambolt 0.2.0.9001
+
+## Bug fixes — multi-view / filter state coordination (Statistikutforskaren)
+
+Fixes a cluster of sporadic bugs where filter controls and the chart kept
+showing **stale state** after using the basket/multi-view, all rooted in how
+single-KPI vs multi-KPI mode was tracked.
+
+* **`DynamicFilters.svelte` — `multiMode` no longer latches.** Once a multi-KPI
+  trigger fired, `multiMode` stayed `true` for the session and every later
+  single-KPI selection was ignored (filters never refetched). It now returns to
+  single mode when the multi-view reports an empty active set.
+* **`DynamicFilters.svelte` — preserved filter values are validated.** When the
+  KPI changes, kept values are now pruned against the new spec (categorical
+  codes intersected, invalid single-selects reset to default) instead of being
+  preserved by dimension *name* alone. Stops controls from being trapped
+  disabled (`dimCompat`) by a stale, now-invalid selection.
+* **`MultiViewPanel.svelte` — explicit activation + single-select exit.** The
+  multi-view now activates only on an explicit `ambolt:explore-basket` event
+  (from the basket's "Utforska data"), not automatically whenever the basket is
+  non-empty. A single-KPI selection (`ambolt:select` without `fromBasket`)
+  clears the views — so the previous comparison no longer hangs on when the user
+  picks a new single series — while the basket itself is kept for re-exploring.
+  It also always announces the current active-KPI set (including empty) so
+  `DynamicFilters` can leave multi-mode.
+* **`BasketPanel.svelte`** — "Utforska data" marks its `ambolt:select` with
+  `fromBasket: true` and dispatches `ambolt:explore-basket` with all basket KPIs.
+* **`ServerSearchInput.svelte`** — dropdown selections now go through the same
+  `ambolt:select` bridge as result-card selections, so every single-KPI choice
+  is observed uniformly (e.g. by the multi-view exit logic).
+
+## New features
+
+* **`MultiViewPanel.svelte` — per-view "Visa R-kod" button.** Each view can open
+  a modal with runnable R reproducing that view's exact pipeline (fetched from an
+  app-supplied `/api/codegen` endpoint), with copy-to-clipboard. Needed because a
+  single top-level code generator cannot represent per-view state (each view has
+  its own KPIs, viz type and layout).
+
 # ambolt 0.2.0.9000
 
 ## Bug fixes
@@ -84,6 +149,21 @@
   breakpoint numbers themselves (1198, 1024) are hard-coded in the
   framework's generated CSS. Apps that need different thresholds add
   their own `@media` rules in `app$theme(css = ...)` / `theme.css`.
+* `.section-compact :global(label)` now wraps long text to multiple
+  lines (`white-space: normal`, `word-wrap: break-word`) instead of
+  truncating with `text-overflow: ellipsis`. Compact-section labels
+  carry functional meaning (they describe what the input does), so
+  truncation makes the input unidentifiable. The earlier ellipsis was
+  introduced to prevent rows overflowing their column; wrapping
+  achieves the same containment without information loss — the row
+  grows downwards. `align-items: center` on the row container keeps
+  the input vertically centred next to a multi-line label.
+* `RadioButtons` switches from "shared-frame bar" to "individual pill
+  buttons" below 1198 px (matching the sidebar-shrink threshold).
+  Without the switch, the bar's surrounding border encloses both rows
+  after wrap and the lone wrapped button — sitting at half-bar width
+  centred — appears with no border at all between its white face and
+  the bar's interior.
 
 # ambolt 0.2.0
 

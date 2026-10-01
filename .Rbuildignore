@@ -12,6 +12,9 @@
 ^\.gitignore$
 ^\.Rbuildignore$
 ^CLAUDE\.md$
+^ARCHITECTURE\.md$
+^BACKLOG\.md$
+^OBSERVATIONS\.md$
 ^LICENSE\.md$
 ^node_modules$
 ^package\.json$

@@ -21,11 +21,28 @@
   let views = $state([]);
   let nextViewId = $state(1);
 
-  // Auto-create initial view when basket has items and no views exist
+  // Multi-view activates ONLY on an explicit "Utforska data" (the
+  // ambolt:explore-basket event) — not automatically when the basket has
+  // items. A single-KPI selection (ambolt:select without fromBasket) leaves
+  // the multi-view by clearing the views; the basket itself is kept so the
+  // user can re-explore. This is what stops the OLD comparison from hanging
+  // on when the user picks a new single series from search.
   $effect(() => {
-    if (basket.count > 0 && views.length === 0) {
-      addView(basket.items.map(i => i.value));
+    function handleExploreBasket(e) {
+      const vals = (e.detail?.values ?? []).filter(Boolean);
+      if (vals.length === 0) return;
+      views = [{ id: nextViewId, kpiValues: vals, vizType: 'timeseries', layout: 'overlay' }];
+      nextViewId++;
     }
+    function handleSingleSelect(e) {
+      if (!e.detail?.fromBasket) views = [];
+    }
+    document.addEventListener('ambolt:explore-basket', handleExploreBasket);
+    document.addEventListener('ambolt:select', handleSingleSelect);
+    return () => {
+      document.removeEventListener('ambolt:explore-basket', handleExploreBasket);
+      document.removeEventListener('ambolt:select', handleSingleSelect);
+    };
   });
 
   // Notify DynamicFilters about all active KPIs (for merged filter spec)
@@ -45,12 +62,14 @@
     return map;
   });
 
+  // Always announce the current active-KPI set — INCLUDING the empty set, so
+  // DynamicFilters can leave multi-mode and return to single-KPI filtering
+  // when the user drops back out of the multi-view. (Previously this only
+  // fired for length > 0, which latched DynamicFilters in multi-mode forever.)
   $effect(() => {
-    if (activeKpis.length > 0) {
-      document.dispatchEvent(new CustomEvent('ambolt:filter-trigger', {
-        detail: { values: activeKpis, kpiViewMap: kpiViewMap }
-      }));
-    }
+    document.dispatchEvent(new CustomEvent('ambolt:filter-trigger', {
+      detail: { values: activeKpis, kpiViewMap: kpiViewMap }
+    }));
   });
 
   // View index letters: A, B, C, ...
@@ -120,6 +139,38 @@
   function mapDisabled(view) {
     return view.kpiValues.length > 1;
   }
+
+  // --- Per-view "Visa R-kod" (reproduces this view's exact pipeline) ---
+  let codeDialog;
+  let codeText = $state('');
+  let codeLoading = $state(false);
+
+  async function showCode(view) {
+    codeText = '';
+    codeLoading = true;
+    codeDialog?.showModal();
+    try {
+      const p = viewParams(view);
+      const url = new URL('/api/codegen', baseUrl || window.location.origin);
+      for (const [k, v] of Object.entries(p)) {
+        if (v != null && v !== '') url.searchParams.set(k, v);
+      }
+      const res = await fetch(url.toString());
+      const data = await res.json();
+      codeText = data.code || '# (ingen kod)';
+    } catch (err) {
+      codeText = '# Fel vid hämtning av R-kod: ' + err.message;
+    } finally {
+      codeLoading = false;
+    }
+  }
+  function copyCode(btn) {
+    navigator.clipboard.writeText(codeText);
+    if (btn) {
+      btn.textContent = 'Kopierad!';
+      setTimeout(() => { btn.textContent = 'Kopiera kod'; }, 1500);
+    }
+  }
 </script>
 
 {#if views.length > 0}
@@ -166,14 +217,20 @@
             }
             disabled={{ map: mapDisabled(view) }}
           />
-          {#if view.kpiValues.length > 1}
-            <div class="mvp-layout-toggle">
-              <button class="mvp-layout-btn" class:active={view.layout === 'overlay'}
-                      onclick={() => setLayout(view.id, 'overlay')}>Overlay</button>
-              <button class="mvp-layout-btn" class:active={view.layout === 'grid'}
-                      onclick={() => setLayout(view.id, 'grid')}>Grid</button>
-            </div>
-          {/if}
+          <div class="mvp-viz-bar-right">
+            {#if view.kpiValues.length > 1}
+              <div class="mvp-layout-toggle">
+                <button class="mvp-layout-btn" class:active={view.layout === 'overlay'}
+                        onclick={() => setLayout(view.id, 'overlay')}>Overlay</button>
+                <button class="mvp-layout-btn" class:active={view.layout === 'grid'}
+                        onclick={() => setLayout(view.id, 'grid')}>Grid</button>
+              </div>
+            {/if}
+            {#if view.kpiValues.length > 0}
+              <button type="button" class="mvp-code-btn" onclick={() => showCode(view)}
+                      title="Visa R-kod som reproducerar denna vy">&lt;/&gt; R-kod</button>
+            {/if}
+          </div>
         </div>
 
         <!-- Chart or placeholder -->
@@ -196,6 +253,22 @@
     <button class="mvp-add-view" onclick={() => addView()}>
       + Lägg till vy
     </button>
+
+    <dialog bind:this={codeDialog} class="mvp-code-dialog"
+            onclick={(e) => { if (e.target === codeDialog) codeDialog.close(); }}>
+      <div class="mvp-code-inner">
+        <div class="mvp-code-head">
+          <span class="mvp-code-title">R-kod för denna vy</span>
+          <button type="button" class="mvp-code-close" onclick={() => codeDialog.close()}>×</button>
+        </div>
+        {#if codeLoading}
+          <div class="mvp-code-loading">Genererar...</div>
+        {:else}
+          <pre class="mvp-code-pre">{codeText}</pre>
+          <button type="button" class="mvp-code-copy" onclick={(e) => copyCode(e.currentTarget)}>Kopiera kod</button>
+        {/if}
+      </div>
+    </dialog>
   </div>
 {:else if basket.count > 0}
   <div class="mvp-empty">
@@ -351,6 +424,86 @@
   .mvp-add-view:hover {
     border-color: #0B7A75;
     color: #0B7A75;
+  }
+  .mvp-viz-bar-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .mvp-code-btn {
+    background: #F7FAFC;
+    border: 1px solid #E2E8F0;
+    color: #4A5568;
+    border-radius: 5px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    cursor: pointer;
+  }
+  .mvp-code-btn:hover {
+    border-color: #0B7A75;
+    color: #0B7A75;
+  }
+  .mvp-code-dialog {
+    border: none;
+    border-radius: 10px;
+    padding: 0;
+    max-width: min(860px, 92vw);
+    width: 860px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  }
+  .mvp-code-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .mvp-code-inner {
+    padding: 1.1rem 1.3rem 1.3rem;
+  }
+  .mvp-code-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.7rem;
+  }
+  .mvp-code-title {
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  .mvp-code-close {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #6b7280;
+  }
+  .mvp-code-loading {
+    color: #6b7280;
+    font-style: italic;
+    padding: 1rem 0;
+  }
+  .mvp-code-pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    overflow: auto;
+    max-height: 60vh;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    white-space: pre;
+  }
+  .mvp-code-copy {
+    margin-top: 0.8rem;
+    background: #0B7A75;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .mvp-code-copy:hover {
+    background: #065956;
   }
   .mvp-empty {
     text-align: center;

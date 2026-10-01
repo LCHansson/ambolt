@@ -267,7 +267,10 @@
             type="button"
             class="server-search-option"
             class:active={i === activeIndex}
-            onmousedown={(e) => { e.preventDefault(); select(item); }}
+            onmousedown={(e) => { e.preventDefault();
+              document.dispatchEvent(new CustomEvent('ambolt:select', {
+                detail: { inputId: id, value: item[valueField], label: item.label || item.title }
+              })); }}
             onmouseenter={() => activeIndex = i}
             title={item.description || ''}
           >

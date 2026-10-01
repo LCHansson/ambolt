@@ -463,20 +463,26 @@
   }
   .section-compact :global(label) {
     flex: 1 !important;
-    /* min-width: 0 lets the label shrink below its nowrap content size
-       when the column is narrower than label + fixed-width input would
-       otherwise need. Without it, long labels (e.g. multi-word Swedish
-       question text) push the row past the column edge. The overflow /
-       ellipsis pair degrades a too-long label to a truncated one-liner
-       rather than overflowing the parent. */
+    /* min-width: 0 lets the label shrink below its content-driven
+       min-size, which together with `white-space: normal` allows the
+       label text to wrap to multiple lines when the column is narrower
+       than label-on-one-line + fixed-width input would otherwise need.
+       Wrapping is preferred over ellipsis-truncation because compact-
+       section labels are functional (they explain what the input is)
+       and an "..." renders the input unidentifiable. The row grows
+       vertically; `align-items: center` on the row container keeps the
+       input vertically centred next to a multi-line label. */
     min-width: 0 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    white-space: normal !important;
+    word-wrap: break-word;
     text-align: right !important;
-    white-space: nowrap !important;
     margin-bottom: 0 !important;
     font-size: var(--ambolt-compact-font-size, 12px) !important;
     font-weight: 400 !important;
+    /* Match the input row-height as line-height so single-line labels
+       still align with their input neighbour; wrapped labels grow
+       downwards rather than upwards. */
+    line-height: var(--ambolt-compact-row-height, 20px) !important;
   }
   .section-compact :global(input[type="number"]),
   .section-compact :global(input[type="text"]) {
