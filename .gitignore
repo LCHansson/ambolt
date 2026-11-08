@@ -8,3 +8,9 @@ Meta
 .ambolt_build
 node_modules
 package-lock.json
+
+# Local working notes; they stay on this machine and are not part of the public repo.
+/ARCHITECTURE.md
+/BACKLOG.md
+/CLAUDE.md
+/OBSERVATIONS.md
